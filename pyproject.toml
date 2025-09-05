@@ -38,7 +38,11 @@ package-dir = { "" = "src" }
 version = { attr = "doxydochub.__version__" }
 
 [tool.setuptools.package-data]
-doxydochub = ["migrations/**/*"]
+doxydochub = [
+    "database/migrations/**/*",
+    "server/templates/**/*",
+    "server/static/**/*",
+]
 
 [build-system]
 requires = ["setuptools>=77.0", "wheel"]
