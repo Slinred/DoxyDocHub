@@ -1,3 +1,5 @@
+import logging
+
 import click
 
 from .server.server_config import (
@@ -5,11 +7,30 @@ from .server.server_config import (
 )
 from .server.server import DoxyDocHubServer
 
+VERSION = "0.1.0"
+
+
+# Configure root logger once
+def configure_logging(loglevel: str) -> None:
+    numeric_level = getattr(logging, loglevel.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise click.BadParameter(f"Invalid log level: {loglevel}")
+    logging.basicConfig(
+        level=numeric_level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
 
 @click.group()
-def main():
+@click.option(
+    "--loglevel",
+    default="INFO",
+    show_default=True,
+    help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).",
+)
+def main(loglevel: str):
     """DoxyDocHub – Host and manage Doxygen documentation archives."""
-    pass
+    configure_logging(loglevel)
 
 
 @main.command()
