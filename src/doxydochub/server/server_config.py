@@ -3,7 +3,19 @@ import os
 import logging
 import sys
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
+
+
+class DoxyDocHubConfigGeneric:
+    def __init__(self, version: str) -> None:
+        self._version = version
+
+    @property
+    def version(self) -> str:
+        return self._version
+
+    def to_dict(self) -> dict[str, str | int | bool]:
+        return {"version": self._version}
 
 
 class DoxyDocHubConfigServer:
@@ -29,12 +41,17 @@ class DoxyDocHubConfigServer:
 
 
 class DoxyDocHubConfigData:
-    def __init__(self, data_dir: str) -> None:
+    def __init__(self, data_dir: str, db_url: str) -> None:
         self._data_dir = data_dir
+        self._db_url = db_url
 
     @property
     def data_dir(self) -> str:
         return self._data_dir
+
+    @property
+    def db_url(self) -> str:
+        return self._db_url
 
     def to_dict(self) -> dict[str, str | int | bool]:
         return {"dir": self._data_dir}
@@ -43,19 +60,32 @@ class DoxyDocHubConfigData:
 class DoxyDocHubConfig:
     DEFAULT_CONFIG_FILE = "config.ini"
 
+    DEFAULT_LISTEN_HOST = "0.0.0.0"
+    DEFAULT_PORT = 8099
+
+    GENERIC_CFG_SECTION = "generic"
     DATA_CFG_SECTION = "data"
     SERVER_CFG_SECTION = "server"
 
     def __init__(self):
+        from ..database.database import DoxyDocHubDatabase
+
         self._logger = logging.getLogger(self.__class__.__name__)
         self._config_parser = configparser.ConfigParser()
 
-        self._server = DoxyDocHubConfigServer("0.0.0.0", 8099, False)
-        self._data = DoxyDocHubConfigData("data")
+        self._generic = DoxyDocHubConfigGeneric(VERSION)
+        self._server = DoxyDocHubConfigServer(
+            self.DEFAULT_LISTEN_HOST, self.DEFAULT_PORT, False
+        )
+        self._data = DoxyDocHubConfigData("data", DoxyDocHubDatabase.DEFAULT_DB_URL)
 
         self._file = self.DEFAULT_CONFIG_FILE
 
         self._config = {}
+
+    @property
+    def generic(self) -> DoxyDocHubConfigGeneric:
+        return self._generic
 
     @property
     def server(self) -> DoxyDocHubConfigServer:
@@ -112,8 +142,16 @@ class DoxyDocHubConfig:
 
         self_dict = self.to_dict()
 
-        for key in self_dict.keys():
+        if self._config_parser.has_option(self.GENERIC_CFG_SECTION, "version"):
+            version = self._config_parser.get(
+                self.GENERIC_CFG_SECTION, "version", fallback=VERSION
+            )
+            if version != VERSION:
+                self._logger.warning(
+                    f"Config file version '{version}' does not match software version '{VERSION}'"
+                )
 
+        for key in self_dict.keys():
             if key not in self._config_parser.sections():
                 raise ValueError(f"Missing key '{path + key}' in loaded config")
             invalid_keys.remove(key)
@@ -137,6 +175,7 @@ class DoxyDocHubConfig:
 
     def to_dict(self) -> dict[str, dict[str, str | int | bool]]:
         return {
+            self.GENERIC_CFG_SECTION: self._generic.to_dict(),
             self.SERVER_CFG_SECTION: self._server.to_dict(),
             self.DATA_CFG_SECTION: self._data.to_dict(),
         }
