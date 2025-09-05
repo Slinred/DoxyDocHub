@@ -3,6 +3,8 @@ import os
 import logging
 import sys
 
+VERSION = "0.1.0"
+
 
 class DoxyDocHubConfigServer:
     def __init__(self, host: str, port: int, debug: bool) -> None:
@@ -51,11 +53,17 @@ class DoxyDocHubConfig:
         self._server = DoxyDocHubConfigServer("0.0.0.0", 8099, False)
         self._data = DoxyDocHubConfigData("data")
 
+        self._file = self.DEFAULT_CONFIG_FILE
+
         self._config = {}
 
     @property
     def server(self) -> DoxyDocHubConfigServer:
         return self._server
+
+    @property
+    def file(self) -> str:
+        return self._file
 
     @property
     def data(self) -> DoxyDocHubConfigData:
@@ -77,6 +85,8 @@ class DoxyDocHubConfig:
         except ValueError as e:
             self._error_and_exit(f"Configuration error in {file}: {e}")
 
+        self._file = file
+
     def _error_and_exit(self, message: str):
         self._logger.error(message)
         sys.exit(1)
@@ -90,6 +100,7 @@ class DoxyDocHubConfig:
             options = self_dict[section].items()
             config[section] = {k: str(o) for k, o in options}
         with open(file, "w") as configfile:
+            configfile.write(f"# Version = {VERSION}\n\n")
             config.write(configfile)
 
         self._logger.info(f"Default configuration created at {file}")

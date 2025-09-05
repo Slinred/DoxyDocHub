@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>System Information</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2em;
+            background: #f8f9fa;
+        }
+        .version-table {
+            border-collapse: collapse;
+            width: 50%;
+            margin: auto;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .version-table th, .version-table td {
+            border: 1px solid #dee2e6;
+            padding: 0.75em 1em;
+            text-align: left;
+        }
+        .version-table th {
+            background: #e9ecef;
+        }
+        .version-title {
+            text-align: center;
+            margin-bottom: 1em;
+        }
+    </style>
+</head>
+<body>
+    <h2 class="version-title">Version Information</h2>
+    <table class="version-table">
+        <thead>
+            <tr>
+                <th>Component</th>
+                <th>Version</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Python</td>
+                <td>{{ python_version }}</td>
+            </tr>
+            <tr>
+                <td>DoxyDocHub</td>
+                <td>{{ program_version }}</td>
+            </tr>
+            <tr>
+                <td>Database Schema</td>
+                <td>{{ db_schema_version }}</td>
+            </tr>
+            <tr>
+                <td>CLI</td>
+                <td>{{ cli_version }}</td>
+            </tr>
+            <tr>
+                <td>Config</td>
+                <td>{{ config_version }}</td>
+            </tr>
+        </tbody>
+    </table>
+    <h2 class="version-title">Runtime Information</h2>
+    <table class="version-table">
+        <thead>
+            <tr>
+                <th>Property</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Python exectuable</td>
+                <td>{{ python_exe }}</td>
+            </tr>
+            <tr>
+                <td>Working directory</td>
+                <td>{{ work_dir }}</td>
+            </tr>
+            <tr>
+                <td>Config file</td>
+                <td>{{ config_file }}</td>
+            </tr>
+            <tr>
+                <td>Data directory</td>
+                <td>{{ data_dir }}</td>
+            </tr>
+            <tr>
+                <td>Database</td>
+                <td>{{ db_url }}</td>
+            </tr>
+            <tr>
+                <td>Database size</td>
+                <td>{{ db_size }}</td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>
