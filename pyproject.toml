@@ -1,16 +1,12 @@
 [project]
 name = "doxydochub"
 description = "Python-based Doxygen documentation hosting solution"
-authors = [
-    { name = "Nils Weyand", email = "nils@weyand-web.de" }
-]
+authors = [{ name = "Nils Weyand", email = "nils@weyand-web.de" }]
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 
-dependencies = [
-    "flask>=3.1.0"
-]
+dependencies = ["flask>=3.1.0", "click>=8.1"]
 
 dynamic = ["version"]
 
@@ -20,7 +16,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent"
+    "Operating System :: OS Independent",
 ]
 
 [project.urls]
@@ -31,7 +27,7 @@ Issues = "https://github.com/slinred/doxydochub/issues"
 doxydochub = "doxydochub.cli:main"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.dynamic]
 version = { attr = "doxydochub.__version__" }

@@ -3,6 +3,7 @@ import os
 import logging
 import sys
 
+
 class DoxyDocHubConfigServer:
     def __init__(self, host: str, port: int, debug: bool) -> None:
         self._host = host
@@ -20,13 +21,10 @@ class DoxyDocHubConfigServer:
     @property
     def debug(self) -> bool:
         return self._debug
-    
-    def to_dict(self) -> dict[str, str|int|bool]:
-        return {
-            "host": self._host,
-            "port": self._port,
-            "debug": self._debug
-        }
+
+    def to_dict(self) -> dict[str, str | int | bool]:
+        return {"host": self._host, "port": self._port, "debug": self._debug}
+
 
 class DoxyDocHubConfigData:
     def __init__(self, data_dir: str) -> None:
@@ -35,38 +33,41 @@ class DoxyDocHubConfigData:
     @property
     def data_dir(self) -> str:
         return self._data_dir
-    
-    def to_dict(self) -> dict[str, str]:
-        return {
-            "dir": self._data_dir
-        }
 
-class DoxyDocHubConfig():
+    def to_dict(self) -> dict[str, str | int | bool]:
+        return {"dir": self._data_dir}
+
+
+class DoxyDocHubConfig:
     DEFAULT_CONFIG_FILE = "config.ini"
 
-    DEFAULT_CONFIG: dict[str, DoxyDocHubConfigServer|DoxyDocHubConfigData] = {
-        "server": DoxyDocHubConfigServer("0.0.0.0", 8099, False),
-        "data": DoxyDocHubConfigData("data")
-    }
-    
+    DATA_CFG_SECTION = "data"
+    SERVER_CFG_SECTION = "server"
+
     def __init__(self):
         self._logger = logging.getLogger(self.__class__.__name__)
         self._config_parser = configparser.ConfigParser()
-        self._config = self.DEFAULT_CONFIG.copy()
+
+        self._server = DoxyDocHubConfigServer("0.0.0.0", 8099, False)
+        self._data = DoxyDocHubConfigData("data")
+
+        self._config = {}
 
     @property
-    def config(self) -> dict[str, DoxyDocHubConfigServer|DoxyDocHubConfigData]:
-        return self._config
+    def server(self) -> DoxyDocHubConfigServer:
+        return self._server
 
-    def load(self, file: str):
+    @property
+    def data(self) -> DoxyDocHubConfigData:
+        return self._data
+
+    def load(self, file: str) -> None:
         self._logger.info(f"Loading configuration from {file}...")
 
-        DefaultCfgFile = os.path.abspath(os.path.join(os.getcwd(), self.DEFAULT_CONFIG_FILE))
-
-        if not os.path.exists(file) and DefaultCfgFile != file:
+        if not os.path.exists(file) and self.DEFAULT_CONFIG_FILE != file:
             self._error_and_exit(f"Configuration file '{file}' not found.")
 
-        if not os.path.exists(file) and DefaultCfgFile == file:
+        if not os.path.exists(file) and self.DEFAULT_CONFIG_FILE == file:
             self._create_default_config(file)
 
         self._config_parser.read(file)
@@ -75,21 +76,20 @@ class DoxyDocHubConfig():
             self._validate_config()
         except ValueError as e:
             self._error_and_exit(f"Configuration error in {file}: {e}")
-    
-        return self._config_parser
 
     def _error_and_exit(self, message: str):
         self._logger.error(message)
         sys.exit(1)
-    
+
     def _create_default_config(self, file: str):
         self._logger.info(f"Creating default configuration at {file}...")
 
         config = configparser.ConfigParser()
-        for section in self.DEFAULT_CONFIG.keys():
-            options = self.DEFAULT_CONFIG[section].to_dict()
+        self_dict = self.to_dict()
+        for section in self_dict.keys():
+            options = self_dict[section].items()
             config[section] = {k: str(o) for k, o in options}
-        with open(file, 'w') as configfile:
+        with open(file, "w") as configfile:
             config.write(configfile)
 
         self._logger.info(f"Default configuration created at {file}")
@@ -98,22 +98,34 @@ class DoxyDocHubConfig():
         self._logger.info("Validating configuration...")
         path = ""
         invalid_keys: list[str] = self._config_parser.sections()
-        
-        for key in self.DEFAULT_CONFIG:
-            
+
+        self_dict = self.to_dict()
+
+        for key in self_dict.keys():
+
             if key not in self._config_parser.sections():
                 raise ValueError(f"Missing key '{path + key}' in loaded config")
             invalid_keys.remove(key)
 
             invalid_items: list[str] = list(self._config_parser[key].keys())
-            for item in self.DEFAULT_CONFIG[key]:
+            for item in self_dict[key]:
                 if item not in self._config_parser[key]:
-                    raise ValueError(f"Missing key '{path + key}.{item}' in loaded config")
+                    raise ValueError(
+                        f"Missing key '{path + key}.{item}' in loaded config"
+                    )
                 invalid_items.remove(item)
 
             if len(invalid_items) > 0:
                 raise ValueError(f"Unexpected key '{path + key}' in loaded config")
         if len(invalid_keys) > 0:
-            raise ValueError(f"Unexpected key '{path + invalid_keys[0]}' in loaded config")
-            
+            raise ValueError(
+                f"Unexpected key '{path + invalid_keys[0]}' in loaded config"
+            )
+
         self._logger.info("Configuration is valid.")
+
+    def to_dict(self) -> dict[str, dict[str, str | int | bool]]:
+        return {
+            self.SERVER_CFG_SECTION: self._server.to_dict(),
+            self.DATA_CFG_SECTION: self._data.to_dict(),
+        }
