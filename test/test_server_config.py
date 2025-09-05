@@ -1,8 +1,8 @@
 import pytest
 import os
 import configparser
-from doxydochub.server.server_config import DoxyDocHubConfig
 import sys
+
 from doxydochub.server.server_config import (
     DoxyDocHubConfig,
     DoxyDocHubConfigServer,
