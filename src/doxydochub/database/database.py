@@ -1,12 +1,12 @@
 import logging
 import os
+import typing
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 import alembic.config
 import alembic.command
 
-from .database_schema import DataBaseSchema
 import shutil
 import datetime
 
@@ -17,14 +17,21 @@ class DoxyDocHubDatabase:
 
     ALEMBIC_DATA = os.path.join(os.path.dirname(__file__), "migrations")
 
-    def __init__(self):
+    def __init__(self, db_url: typing.Optional[str] = None):
 
         self._logger = logging.getLogger(self.__class__.__name__)
 
-        # Use SQLite (file-based)
+        if not db_url:
+            self._logger.warning(
+                f"No database URL provided! Falling back to default SQLite database '{self.DEFAULT_DB_URL}'."
+            )
+            db_url = self.DEFAULT_DB_URL
+
+        self._db_url = db_url
+
         self._logger.info("Initializing database...")
         self._engine = create_engine(
-            self.DEFAULT_DB_URL, echo=self._logger.level == logging.DEBUG, future=True
+            self._db_url, echo=self._logger.level == logging.DEBUG, future=True
         )
         self._session = self._create_session()
 
@@ -35,7 +42,7 @@ class DoxyDocHubDatabase:
 
         self._init_empty_database()
 
-        self._validate_schema()
+        self.validate_schema()
 
     def _create_session(self):
         session = sessionmaker(bind=self._engine)
@@ -45,12 +52,6 @@ class DoxyDocHubDatabase:
         if not inspect(self._engine).get_table_names():
             self._logger.info("Empty database detected! Creating database schema...")
             self.migrate(backup=False)
-
-    def _validate_schema(self) -> None:
-        try:
-            alembic.command.check(self._alembic_cfg)  # Alembic 1.13+
-        except Exception as e:
-            raise RuntimeError("Database schema is not up-to-date!") from e
 
     @property
     def session(self):
@@ -83,6 +84,12 @@ class DoxyDocHubDatabase:
     @property
     def database_url(self) -> str:
         return str(self._engine.url)
+
+    def validate_schema(self) -> None:
+        try:
+            alembic.command.check(self._alembic_cfg)  # Alembic 1.13+
+        except Exception as e:
+            raise RuntimeError("Database schema is not up-to-date!") from e
 
     def migrate(self, backup: bool = True) -> None:
         self._logger.info("Running database migrations...")
