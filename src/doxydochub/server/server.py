@@ -4,6 +4,8 @@ import sys
 from flask import Flask, render_template
 
 from .server_config import DoxyDocHubConfig
+from ..api.doxydochubapi import DoxyDocHubApi
+
 from ..database.database import DoxyDocHubDatabase
 
 
@@ -21,10 +23,12 @@ class DoxyDocHubServer:
 
         self._config = config
         self._version = __version__
+        self._db = DoxyDocHubDatabase(db_url=self._config.data.db_url)
 
         self._setup_routes()
 
-        self._db = DoxyDocHubDatabase()
+        self._api = DoxyDocHubApi(db=self._db, config=self._config)
+        self._api.register_api(self._app)
 
     def _setup_routes(self):
         @self._app.route("/")

@@ -99,7 +99,7 @@ def upgrade(db_url: typing.Optional[str], backup: bool):
     """Upgrade the database schema to the latest version."""
     from .database.database import DoxyDocHubDatabase
 
-    db = DoxyDocHubDatabase(db_url=db_url)
+    db = DoxyDocHubDatabase(db_url=db_url, validate=False)
     try:
         db.migrate(backup=backup)
         click.echo(f"✅ Database schema upgraded to version: {db.schema_version}")

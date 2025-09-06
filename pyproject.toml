@@ -11,6 +11,7 @@ dependencies = [
     "click>=8.1",
     "sqlalchemy>=2.0",
     "alembic>=1.13",
+    "flask-restx>=1.1",
 ]
 
 dynamic = ["version"]

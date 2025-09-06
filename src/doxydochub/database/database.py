@@ -17,7 +17,7 @@ class DoxyDocHubDatabase:
 
     ALEMBIC_DATA = os.path.join(os.path.dirname(__file__), "migrations")
 
-    def __init__(self, db_url: typing.Optional[str] = None):
+    def __init__(self, db_url: typing.Optional[str] = None, validate: bool = True):
 
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -42,7 +42,8 @@ class DoxyDocHubDatabase:
 
         self._init_empty_database()
 
-        self.validate_schema()
+        if validate:
+            self.validate_schema()
 
     def _create_session(self):
         session = sessionmaker(bind=self._engine)

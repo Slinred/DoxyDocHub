@@ -8,9 +8,9 @@ from sqlalchemy import (
     Text,
     DateTime,
     ForeignKey,
-    Integer,
     TypeDecorator,
     Dialect,
+    event,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, declarative_base
@@ -26,6 +26,7 @@ class GUID(TypeDecorator[str]):
     """
 
     impl = String(36)
+    cache_ok = True
 
     def load_dialect_impl(self, dialect: Dialect):
         if dialect.name == "postgresql":
@@ -34,8 +35,8 @@ class GUID(TypeDecorator[str]):
             return dialect.type_descriptor(String(36))
 
     def process_bind_param(self, value: typing.Optional[typing.Any], dialect: Dialect):
-        if value is None:
-            return value
+        if value is None or value == "":
+            return None
         if dialect.name == "postgresql":
             return value
         if isinstance(value, uuid.UUID):
@@ -57,36 +58,76 @@ class Project(DataBaseSchema):
     name = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
     origin_url = Column(Text, nullable=False)
+    latest_version_id = Column(
+        GUID(),
+        ForeignKey("project_versions.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
+    )
 
     parent_id = Column(GUID(), ForeignKey("projects.id"), nullable=True)  # type: ignore
     parent = relationship("Project", remote_side=[id], backref="children")  # type: ignore
 
     versions = relationship(
-        "ProjectVersion", back_populates="project", cascade="all, delete-orphan"
+        "ProjectVersion",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        foreign_keys="[ProjectVersion.project_id]",
     )
+
+    latest_version = relationship(
+        "ProjectVersion", foreign_keys=[latest_version_id], post_update=True
+    )
+
     metadata_items = relationship(
         "ProjectMetadata", back_populates="project", cascade="all, delete-orphan"
     )
+
+    def to_dict(self) -> dict[str, typing.Any]:
+        return {
+            "id": str(self.id),
+            "name": self.name,
+            "created_at": self.created_at.isoformat(),
+            "origin_url": self.origin_url,
+            "latest_version": (
+                self.latest_version.version if self.latest_version else None
+            ),
+            "parent": self.parent.to_dict() if self.parent else None,
+            "metadata": {item.key: item.value for item in self.metadata_items},
+        }
 
 
 class ProjectVersion(DataBaseSchema):
     __tablename__ = "project_versions"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    project_id = Column(GUID(), ForeignKey("projects.id"), nullable=False)  # type: ignore
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)  # type: ignore
     version = Column(String(255), nullable=False)
+    project_id = Column(GUID(), ForeignKey("projects.id"), nullable=False)  # type: ignore
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
     storage_path = Column(Text, nullable=False)
 
-    project = relationship("Project", back_populates="versions")
+    project = relationship(
+        "Project", back_populates="versions", foreign_keys=[project_id]
+    )
 
 
 class ProjectMetadata(DataBaseSchema):
     __tablename__ = "project_metadata"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)  # type: ignore
     project_id = Column(GUID(), ForeignKey("projects.id"), nullable=False)  # type: ignore
     key = Column(String(255), nullable=False)
     value = Column(Text, nullable=False)
 
     project = relationship("Project", back_populates="metadata_items")
+
+
+# after insert on ProjectVersion, update the project's latest_version_id
+@event.listens_for(ProjectVersion, "after_insert")
+def update_latest_version(mapper, connection, target):
+    # target = newly inserted ProjectVersion
+    # update the Project.latest_version_id
+    connection.execute(
+        Project.__table__.update()
+        .where(Project.id == target.project_id)
+        .values(latest_version_id=target.id)
+    )
