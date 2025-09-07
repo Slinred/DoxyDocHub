@@ -102,38 +102,17 @@ class DoxyDocHubConfig:
     def load(self, file: str) -> None:
         self._logger.info(f"Loading configuration from {file}...")
 
-        if not os.path.exists(file) and self.DEFAULT_CONFIG_FILE != file:
-            self._error_and_exit(f"Configuration file '{file}' not found.")
-
-        if not os.path.exists(file) and self.DEFAULT_CONFIG_FILE == file:
-            self._create_default_config(file)
+        if not os.path.exists(file):
+            raise FileNotFoundError(f"Configuration file '{file}' not found.")
 
         self._config_parser.read(file)
 
         try:
             self._validate_config()
         except ValueError as e:
-            self._error_and_exit(f"Configuration error in {file}: {e}")
+            raise RuntimeError(f"Configuration error in {file}: {e}")
 
         self._file = file
-
-    def _error_and_exit(self, message: str):
-        self._logger.error(message)
-        sys.exit(1)
-
-    def _create_default_config(self, file: str):
-        self._logger.info(f"Creating default configuration at {file}...")
-
-        config = configparser.ConfigParser()
-        self_dict = self.to_dict()
-        for section in self_dict.keys():
-            options = self_dict[section].items()
-            config[section] = {k: str(o) for k, o in options}
-        with open(file, "w") as configfile:
-            configfile.write(f"# Version = {VERSION}\n\n")
-            config.write(configfile)
-
-        self._logger.info(f"Default configuration created at {file}")
 
     def _validate_config(self):
         self._logger.info("Validating configuration...")
@@ -172,6 +151,20 @@ class DoxyDocHubConfig:
             )
 
         self._logger.info("Configuration is valid.")
+
+    def create_default_config(self, file: str):
+        self._logger.info(f"Creating default configuration at {file}...")
+
+        config = configparser.ConfigParser()
+        self_dict = self.to_dict()
+        for section in self_dict.keys():
+            options = self_dict[section].items()
+            config[section] = {k: str(o) for k, o in options}
+        with open(file, "w") as configfile:
+            configfile.write(f"# Version = {VERSION}\n\n")
+            config.write(configfile)
+
+        self._logger.info(f"Default configuration created at {file}")
 
     def to_dict(self) -> dict[str, dict[str, str | int | bool]]:
         return {

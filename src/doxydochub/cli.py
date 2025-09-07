@@ -1,5 +1,6 @@
 import logging
 import typing
+import json
 
 import click
 
@@ -108,4 +109,61 @@ def upgrade(db_url: typing.Optional[str], backup: bool):
         raise click.Abort()
 
 
+@click.group()
+def config():
+    """Configuration management commands."""
+    pass
+
+
+@config.command("show")
+@click.option(
+    "--config",
+    type=click.Path(readable=True),
+    default=DoxyDocHubConfig.DEFAULT_CONFIG_FILE,
+    help="Path to config file.",
+)
+def show(config: str):
+    """Show the loaded configuration."""
+    server_cfg = DoxyDocHubConfig()
+    server_cfg.load(config)
+    click.echo(json.dumps(server_cfg.to_dict(), indent=4))
+
+
+@config.command("validate")
+@click.option(
+    "--config",
+    type=click.Path(readable=True),
+    default=DoxyDocHubConfig.DEFAULT_CONFIG_FILE,
+    help="Path to config file.",
+)
+def validate(config: str):
+    """Validate the configuration file."""
+    server_cfg = DoxyDocHubConfig()
+    try:
+        server_cfg.load(config)
+        click.echo("✅ Configuration file is valid.")
+    except Exception as e:
+        click.echo(f"❌ Configuration validation failed: {e}")
+        raise click.Abort()
+
+
+@config.command("create")
+@click.option(
+    "--config",
+    type=click.Path(writable=True),
+    default=DoxyDocHubConfig.DEFAULT_CONFIG_FILE,
+    help="Path to create config file.",
+)
+def create(config: str):
+    """Create a default configuration file."""
+    server_cfg = DoxyDocHubConfig()
+    try:
+        server_cfg.create_default_config(config)
+        click.echo(f"✅ Default configuration file created at {config}.")
+    except Exception:
+        click.echo(f"❌ Failed to create configuration file at {config}.")
+        raise click.Abort()
+
+
 main.add_command(db)
+main.add_command(config)
