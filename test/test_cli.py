@@ -23,18 +23,24 @@ def test_logging_configuration(runner: CliRunner, monkeypatch: pytest.MonkeyPatc
     def logging_config(level: int, **kwargs) -> None:
         assert level == logging.DEBUG
 
-    class DummyServer:
-        def __init__(self, cfg):
+    class DummyConfig:
+        def __init__(self):
             pass
 
-        def run(self) -> None:
-            pass  # Simulate server run without actually starting it
+        def load(self, file) -> None:
+            pass
 
-    monkeypatch.setattr("doxydochub.cli.DoxyDocHubServer", DummyServer)
+        def to_dict(self) -> dict:
+            return {"key": "value"}
+
+    monkeypatch.setattr("doxydochub.cli.DoxyDocHubConfig", DummyConfig)
     monkeypatch.setattr("logging.basicConfig", logging_config)
-    result = runner.invoke(main, ["--loglevel", "DEBUG", "serve"])
+    monkeypatch.setattr(
+        "os.path.exists", lambda file: True
+    )  # Simulate config file exists
+    result = runner.invoke(main, ["--loglevel", "DEBUG", "config", "show"])
     assert result.exit_code == 0
-    assert "DoxyDocHub" in result.output
+    assert json.dumps({"key": "value"}, indent=4) in result.output
 
 
 def test_invalid_log_level(runner: CliRunner, monkeypatch: pytest.MonkeyPatch):
