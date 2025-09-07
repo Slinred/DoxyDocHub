@@ -82,6 +82,21 @@ class Project(DataBaseSchema):
         "ProjectMetadata", back_populates="project", cascade="all, delete-orphan"
     )
 
+    def update_metadata(self, new_metadata: dict[str, str]) -> None:
+        existing_keys = {item.key: item for item in self.metadata_items}
+        for key, value in new_metadata.items():
+            if key in existing_keys:
+                existing_keys[key].value = value
+            else:
+                self.metadata_items.append(
+                    ProjectMetadata(project_id=self.id, key=key, value=value)
+                )
+
+        # Remove metadata items not in new_metadata
+        for key in list(existing_keys.keys()):
+            if key not in new_metadata:
+                self.metadata_items.remove(existing_keys[key])
+
     def to_dict(self) -> dict[str, typing.Any]:
         return {
             "id": str(self.id),

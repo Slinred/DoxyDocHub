@@ -27,7 +27,7 @@ class DoxyDocHubServer:
 
         self._setup_routes()
 
-        self._api = DoxyDocHubApi(db=self._db, config=self._config)
+        self._api = DoxyDocHubApi(db=self._db, server_config=self._config)
         self._api.register_api(self._app)
 
     def _setup_routes(self):

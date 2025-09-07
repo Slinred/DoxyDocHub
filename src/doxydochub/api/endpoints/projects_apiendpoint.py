@@ -168,21 +168,23 @@ class DoxyDocHubApiProjectsEndpoint:
                 latest_version_id = data.get("latest_version_id")
 
                 try:
+                    result = 200
                     project = db.session.query(Project).filter_by(id=id).first()
                     if not project:
+                        self.logger.info(
+                            f"Project with ID {id} not found, creating new one"
+                        )
                         # Create new project
                         project = Project(
                             id=id,
                             name=name,
                             origin_url=origin_url,
                             parent_id=parent_id,
+                            latest_version_id=latest_version_id,
                         )
                         db.session.add(project)
                         db.session.flush()
-                        return (
-                            project.to_dict(),
-                            201,
-                        )
+                        result = 201
                     else:
                         project.name = name if name is not None else project.name
                         project.origin_url = (
@@ -196,30 +198,15 @@ class DoxyDocHubApiProjectsEndpoint:
                             if latest_version_id is not None
                             else project.latest_version_id
                         )
+                        result = 200
 
-                        # Update metadata
-                        for key, value in metadata.items():
-                            meta_item = (
-                                db.session.query(ProjectMetadata)
-                                .filter_by(project_id=project.id, key=key)
-                                .first()
-                            )
-                            if meta_item:
-                                meta_item.value = value
-                            else:
-                                db.session.add(
-                                    ProjectMetadata(
-                                        project_id=project.id, key=key, value=value
-                                    )
-                                )
-                        db.session.commit()
-                        self.logger.info(
-                            f"Updated project {project.name} ({project.id})"
-                        )
-                        return (
-                            project.to_dict(),
-                            200,
-                        )
+                    project.update_metadata(metadata)
+                    db.session.commit()
+                    self.logger.info(f"Updated project {project.name} ({project.id})")
+                    return (
+                        project.to_dict(),
+                        result,
+                    )
                 except sqla_exc.SQLAlchemyError as e:
                     db.session.rollback()
                     self.logger.exception("Failed to update project")
