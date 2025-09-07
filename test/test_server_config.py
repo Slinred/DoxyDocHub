@@ -73,7 +73,7 @@ def test_config_to_dict():
 def test_config_create_default(tmp_path):
     cfg_file = tmp_path / "default.ini"
     cfg = DoxyDocHubConfig()
-    cfg._create_default_config(str(cfg_file))
+    cfg.create_default_config(str(cfg_file))
     parser = configparser.ConfigParser()
     parser.read(str(cfg_file))
     assert "server" in parser.sections()
@@ -84,13 +84,14 @@ def test_config_create_default(tmp_path):
     assert parser["data"]["dir"] == "data"
 
 
-def test_config_load_missing_file(tmp_path, monkeypatch):
+def test_config_missing_file(tmp_path, monkeypatch):
     cfg = DoxyDocHubConfig()
     missing_file = tmp_path / "missing.ini"
     # Should create default config if DEFAULT_CONFIG_FILE is used
     cfg.DEFAULT_CONFIG_FILE = str(missing_file)
-    cfg.load(str(missing_file))
-    assert os.path.exists(missing_file)
+
+    with pytest.raises(FileNotFoundError):
+        cfg.load(str(missing_file))
 
 
 def test_config_load_invalid(monkeypatch, tmp_path):
@@ -100,12 +101,10 @@ def test_config_load_invalid(monkeypatch, tmp_path):
     with open(cfg_file, "w") as f:
         config.write(f)
     cfg = DoxyDocHubConfig()
-    # Patch sys.exit to raise SystemExit for testing
-    monkeypatch.setattr(
-        sys, "exit", lambda code=1: (_ for _ in ()).throw(SystemExit(code))
-    )
-    with pytest.raises(SystemExit):
+    with pytest.raises(RuntimeError):
         cfg.load(str(cfg_file))
+
+    os.remove(str(cfg_file))
 
 
 def test_config_validate_extra_key(tmp_path, monkeypatch):
@@ -117,8 +116,6 @@ def test_config_validate_extra_key(tmp_path, monkeypatch):
     with open(cfg_file, "w") as f:
         config.write(f)
     cfg = DoxyDocHubConfig()
-    monkeypatch.setattr(
-        sys, "exit", lambda code=1: (_ for _ in ()).throw(SystemExit(code))
-    )
-    with pytest.raises(SystemExit):
+    with pytest.raises(RuntimeError):
         cfg.load(str(cfg_file))
+    os.remove(str(cfg_file))
