@@ -56,9 +56,6 @@ class DoxyDocHubApiProjectsEndpoint:
         existing_project_model = ns.model(
             "ExistingProject",
             {
-                "id": flask_restx.fields.String(
-                    required=True, description="Project ID (UUIDv4)"
-                ),
                 "name": flask_restx.fields.String(
                     required=False, description="Project name", default=None
                 ),
@@ -82,15 +79,6 @@ class DoxyDocHubApiProjectsEndpoint:
                     default=None,
                     description="Latest version (must be an existing project's version id if provided)",
                 ),
-            },
-        )
-
-        project_id_model = ns.model(
-            "ProjectID",
-            {
-                "id": flask_restx.fields.String(
-                    required=True, description="Project ID (UUIDv4)"
-                )
             },
         )
 
@@ -158,18 +146,90 @@ class DoxyDocHubApiProjectsEndpoint:
                     self.logger.exception("Failed to create project")
                     return {"error": "Database error", "details": str(e)}, 500
 
+        @ns.route("/tree")
+        class ProjectTree(flask_restx.Resource):  # type: ignore
+            """Shows the project tree structure."""
+
+            @ns.doc("get_project_tree")
+            @ns.response(200, "Success")
+            @ns.response(500, "Internal server error")
+            def get(
+                inner_self,
+            ) -> list[dict[str, typing.Any]] | tuple[dict[str, typing.Any], int]:
+                """Get the project tree structure"""
+                try:
+                    projects = self.db.session.query(Project).all()
+
+                    def build_tree(proj: Project) -> dict[str, typing.Any]:
+                        return {
+                            "id": str(proj.id),
+                            "name": proj.name,
+                            "origin_url": proj.origin_url,
+                            "metadata": {
+                                item.key: item.value for item in proj.metadata_items
+                            },
+                            "children": [build_tree(child) for child in proj.children],
+                        }
+
+                    # Find root projects (those without a parent)
+                    root_projects = [p for p in projects if p.parent_id is None]
+                    tree = [build_tree(p) for p in root_projects]
+                    return tree
+                except sqla_exc.SQLAlchemyError as e:
+                    self.logger.exception("Failed to fetch project tree")
+                    return {"error": "Database error", "details": str(e)}, 500
+
+        @ns.route("/<uuid:project_id>")
+        class ProjectDetail(flask_restx.Resource):  # type: ignore
+            """Show details of a specific project."""
+
+            @ns.doc("get_project_details")
+            @ns.response(200, "Success")
+            @ns.response(404, "Project not found")
+            @ns.response(500, "Internal server error")
+            def get(
+                innerself, project_id
+            ) -> dict[str, typing.Any] | tuple[dict[str, typing.Any], int]:
+                """Get details of a specific project by ID"""
+
+                try:
+                    project = db.session.get(Project, project_id)
+                    if not project:
+                        return {"error": "Project not found"}, 404
+
+                    return {
+                        "id": str(project.id),
+                        "name": project.name,
+                        "origin_url": project.origin_url,
+                        "created_at": project.created_at.isoformat(),
+                        "metadata": {
+                            item.key: item.value for item in project.metadata_items
+                        },
+                        "versions": [
+                            {
+                                "id": str(version.id),
+                                "version": version.version,
+                                "created_at": version.created_at.isoformat(),
+                                "storage_path": version.storage_path,
+                            }
+                            for version in project.versions
+                        ],
+                    }
+                except sqla_exc.SQLAlchemyError as e:
+                    self.logger.exception("Failed to fetch project details")
+                    return {"error": "Database error", "details": str(e)}, 500
+
             @ns.doc("update_project")
             @ns.response(200, "Project updated successfully")
             @ns.response(201, "New project created successfully")
             @ns.response(400, "Invalid input")
             @ns.response(500, "Internal server error")
             @ns.expect(existing_project_model, validate=True)
-            def put(inner_self) -> tuple[dict[str, typing.Any], int]:
+            def put(inner_self, project_id) -> tuple[dict[str, typing.Any], int]:
                 """Update existing project or creates if not existing"""
 
                 data: dict[str, typing.Any] = flask.request.get_json()
 
-                id = data.get("id")
                 name = data.get("name")
                 origin_url = data.get("origin_url")
                 parent_id = data.get("parent_id")
@@ -178,14 +238,14 @@ class DoxyDocHubApiProjectsEndpoint:
 
                 try:
                     result = 200
-                    project = db.session.query(Project).filter_by(id=id).first()
+                    project = db.session.query(Project).filter_by(id=project_id).first()
                     if not project:
                         self.logger.info(
-                            f"Project with ID {id} not found, creating new one"
+                            f"Project with ID {project_id} not found, creating new one"
                         )
                         # Create new project
                         project = Project(
-                            id=id,
+                            id=project_id,
                             name=name,
                             origin_url=origin_url,
                             parent_id=parent_id,
@@ -226,33 +286,33 @@ class DoxyDocHubApiProjectsEndpoint:
             @ns.response(400, "Invalid input")
             @ns.response(404, "Project not found")
             @ns.response(500, "Internal server error")
-            @ns.expect(project_id_model, validate=True)
-            def delete(inner_self) -> tuple[dict[str, typing.Any], int]:
+            def delete(inner_self, project_id) -> tuple[dict[str, typing.Any], int]:
                 """Deletes an existing project"""
-                data: dict[str, typing.Any] = flask.request.get_json()
-
-                id = data.get("id")
 
                 try:
-                    project = db.session.query(Project).filter_by(id=id).first()
+                    project = db.session.query(Project).filter_by(id=project_id).first()
                     if not project:
                         self.logger.info(
-                            f"Project with ID {id} not found! Cannot delete."
+                            f"Project with ID {project_id} not found! Cannot delete."
                         )
                         return {"error": "Project not found"}, 404
                     project_name = project.name
                     # First set parent to null for projects that have this project as parent
-                    children = db.session.query(Project).filter_by(parent_id=id)
+                    children = db.session.query(Project).filter_by(parent_id=project_id)
                     for child in children:
                         child.parent_id = None
                     db.session.flush()
                     # Delete the project
                     db.session.delete(project)
                     # Also delete all associated versions and metadata
-                    db.session.query(ProjectVersion).filter_by(project_id=id).delete()
-                    db.session.query(ProjectMetadata).filter_by(project_id=id).delete()
+                    db.session.query(ProjectVersion).filter_by(
+                        project_id=project_id
+                    ).delete()
+                    db.session.query(ProjectMetadata).filter_by(
+                        project_id=project_id
+                    ).delete()
                     db.session.commit()
-                    self.logger.info(f"Deleted project {project_name} ({id})")
+                    self.logger.info(f"Deleted project {project_name} ({project_id})")
                     return (
                         {},
                         200,
@@ -260,79 +320,6 @@ class DoxyDocHubApiProjectsEndpoint:
                 except sqla_exc.SQLAlchemyError as e:
                     db.session.rollback()
                     self.logger.exception("Failed to update project")
-                    return {"error": "Database error", "details": str(e)}, 500
-
-        @ns.route("/tree")
-        class ProjectTree(flask_restx.Resource):  # type: ignore
-            """Shows the project tree structure."""
-
-            @ns.doc("get_project_tree")
-            @ns.response(200, "Success")
-            @ns.response(500, "Internal server error")
-            def get(
-                inner_self,
-            ) -> list[dict[str, typing.Any]] | tuple[dict[str, typing.Any], int]:
-                """Get the project tree structure"""
-                try:
-                    projects = self.db.session.query(Project).all()
-
-                    def build_tree(proj: Project) -> dict[str, typing.Any]:
-                        return {
-                            "id": str(proj.id),
-                            "name": proj.name,
-                            "origin_url": proj.origin_url,
-                            "metadata": {
-                                item.key: item.value for item in proj.metadata_items
-                            },
-                            "children": [build_tree(child) for child in proj.children],
-                        }
-
-                    # Find root projects (those without a parent)
-                    root_projects = [p for p in projects if p.parent_id is None]
-                    tree = [build_tree(p) for p in root_projects]
-                    return tree
-                except sqla_exc.SQLAlchemyError as e:
-                    self.logger.exception("Failed to fetch project tree")
-                    return {"error": "Database error", "details": str(e)}, 500
-
-        @ns.route("/<uuid:project_id>")
-        class ProjectDetail(flask_restx.Resource):  # type: ignore
-            """Show details of a specific project."""
-
-            @ns.doc("get_project")
-            @ns.response(200, "Success")
-            @ns.response(404, "Project not found")
-            @ns.response(500, "Internal server error")
-            def get(
-                innerself, project_id
-            ) -> dict[str, typing.Any] | tuple[dict[str, typing.Any], int]:
-                """Get details of a specific project by ID"""
-
-                try:
-                    project = db.session.get(Project, project_id)
-                    if not project:
-                        return {"error": "Project not found"}, 404
-
-                    return {
-                        "id": str(project.id),
-                        "name": project.name,
-                        "origin_url": project.origin_url,
-                        "created_at": project.created_at.isoformat(),
-                        "metadata": {
-                            item.key: item.value for item in project.metadata_items
-                        },
-                        "versions": [
-                            {
-                                "id": str(version.id),
-                                "version": version.version,
-                                "created_at": version.created_at.isoformat(),
-                                "storage_path": version.storage_path,
-                            }
-                            for version in project.versions
-                        ],
-                    }
-                except sqla_exc.SQLAlchemyError as e:
-                    self.logger.exception("Failed to fetch project details")
                     return {"error": "Database error", "details": str(e)}, 500
 
         api.add_namespace(ns, path=f"/{self.ENDPOINT}")

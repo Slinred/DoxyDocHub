@@ -134,12 +134,11 @@ def test_update_project(clean_test_db, create_app):
 
     # Update project
     update_data = {
-        "id": project_id,
         "name": "UpdatedProj",
         "origin_url": "http://updated.url",
         "metadata": {"key1": "value1", "key2": "value2"},
     }
-    response = client.put(f"/projects/", json=update_data)
+    response = client.put(f"/projects/{project_id}", json=update_data)
     assert response.status_code == 200
     assert response.json["name"] == "UpdatedProj"
     assert response.json["origin_url"] == "http://updated.url"
@@ -147,10 +146,9 @@ def test_update_project(clean_test_db, create_app):
 
     # Update project
     update_data = {
-        "id": project_id,
         "metadata": {"key2": "newvalue2", "key3": "newvalue3"},
     }
-    response = client.put(f"/projects/", json=update_data)
+    response = client.put(f"/projects/{project_id}", json=update_data)
     assert response.status_code == 200
     assert response.json["name"] == "UpdatedProj"
     assert response.json["origin_url"] == "http://updated.url"
@@ -166,12 +164,11 @@ def test_update_project(clean_test_db, create_app):
 def test_update_nonexistent_project(clean_test_db, create_app):
     client = create_app[0].test_client()
     update_data = {
-        "id": uuid.uuid4(),
         "name": "ProjToBeCreated",
         "origin_url": "http://no.url",
         "metadata": {"key1": "value1"},
     }
-    response = client.put(f"/projects/", json=update_data)
+    response = client.put(f"/projects/{uuid.uuid4()}", json=update_data)
     assert response.status_code == 201
     assert response.json["name"] == "ProjToBeCreated"
     assert response.json["origin_url"] == "http://no.url"
@@ -194,12 +191,11 @@ def test_update_project_sql_error(monkeypatch, clean_test_db, create_app):
     monkeypatch.setattr(db.session, "commit", raise_sqlalchemy_error)
 
     update_data = {
-        "id": project_id,
         "name": "ShouldFail",
         "origin_url": "http://fail.url",
         "metadata": {"key1": "value1"},
     }
-    response = client.put(f"/projects/", json=update_data)
+    response = client.put(f"/projects/{project_id}", json=update_data)
     assert response.status_code == 500
     assert "Database error" in response.json["error"]
 
@@ -229,7 +225,7 @@ def test_delete_project(clean_test_db, create_app):
     child_project_id = response.json["id"]
 
     # Delete project
-    response = client.delete(f"/projects/", json={"id": project_id})
+    response = client.delete(f"/projects/{project_id}")
     assert response.status_code == 200
 
     # Verify deletion
@@ -242,7 +238,7 @@ def test_delete_project(clean_test_db, create_app):
 
 def test_delete_nonexistent_project(create_app):
     client = create_app[0].test_client()
-    response = client.delete(f"/projects/", json={"id": uuid.uuid4()})
+    response = client.delete(f"/projects/{uuid.uuid4()}")
     assert response.status_code == 404
     assert "not found" in response.json["error"]
 
@@ -261,7 +257,7 @@ def test_delete_project_sql_error(monkeypatch, clean_test_db, create_app):
 
     monkeypatch.setattr(db.session, "commit", raise_sqlalchemy_error)
 
-    response = client.delete(f"/projects/", json={"id": project_id})
+    response = client.delete(f"/projects/{project_id}")
     assert response.status_code == 500
     assert "Database error" in response.json["error"]
 
