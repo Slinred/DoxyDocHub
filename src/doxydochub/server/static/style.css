@@ -83,3 +83,68 @@ footer {
     text-align: right;
     font-size: 0.9rem;
 }
+
+/* Make cards full width of content area */
+.content {
+    flex: 1;
+    padding: 1rem 2rem;
+    overflow-y: auto;
+}
+
+.card {
+    width: 100%;           /* full width */
+    background-color: #ffffffcc;
+    border-left: 4px solid #004d99;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Card headings */
+.card h3 {
+    margin-top: 0;
+    font-size: 1.2rem;
+    color: #004d99;
+    display: flex;
+    align-items: center;
+}
+
+.card h3 i {
+    margin-right: 8px;
+}
+
+/* Metadata & Versions list */
+.metadata-list, .versions-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0.5rem 0 0 0;
+}
+
+.metadata-list li, .versions-list li {
+    padding: 4px 0;
+    border-bottom: 1px solid #eee;
+}
+
+/* Versions */
+.versions-list li.latest-version {
+    font-weight: bold;
+    color: #0073e6;
+}
+
+.versions-list li i {
+    margin-right: 6px;
+}
+
+.version-date {
+    font-size: 0.85rem;
+    color: #666;
+    margin-left: 4px;
+}
+
+/* Optional hover effect */
+.versions-list li:hover {
+    background-color: #f0f4ff;
+    border-radius: 4px;
+    padding-left: 2px;
+}

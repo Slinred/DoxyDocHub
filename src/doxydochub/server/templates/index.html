@@ -14,14 +14,11 @@
     <main>
         <aside class="sidebar">
             <h2>Projects</h2>
-            <ul class="project-tree">
-                {% for project in projects recursive %}
-                <li class="tree-item {% if project.children %}has-children{% endif %}">
+            {% for project in projects recursive %}
+                <li class="tree-item {% if project.children %}has-children{% endif %}" data-id="{{ project.id }}">
                     <div class="tree-label">
                         {% if project.children %}
                         <i class="fa-solid fa-caret-right toggle"></i>
-                        {% else %}
-                        <i class="fa-solid fa-circle"></i>
                         {% endif %}
                         <i class="fa-solid fa-diagram-project"></i>
                         {{ project.name }}
@@ -32,12 +29,11 @@
                     </ul>
                     {% endif %}
                 </li>
-                {% endfor %}
-            </ul>
+            {% endfor %}
         </aside>
 
-        <section class="content">
-            <h2>Welcome</h2>
+        <section class="content" id="project-content">
+            <h2>Welcome to DoxyDocHub!</h2>
             <p>Select a project from the left to view details.</p>
         </section>
     </main>

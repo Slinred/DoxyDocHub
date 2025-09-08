@@ -327,3 +327,70 @@ def test_project_tree(clean_test_db, create_app):
             assert child["children"][0]["id"] == grandchild_id
         else:
             assert len(child["children"]) == 0
+
+
+def test_project_tree_no_projects(create_app):
+    client = create_app[0].test_client()
+    response = client.get("/projects/tree")
+    assert response.status_code == 200
+    assert response.json == []
+
+
+def test_project_tree_sql_error(monkeypatch, clean_test_db, create_app):
+    client = create_app[0].test_client()
+    db = create_app[1]
+
+    # Simulate SQLAlchemy error on query
+    def raise_sqlalchemy_error(*args, **kwargs):
+        raise sqla_exc.SQLAlchemyError("Simulated DB error")
+
+    monkeypatch.setattr(db.session, "query", raise_sqlalchemy_error)
+
+    response = client.get("/projects/tree")
+    assert response.status_code == 500
+    assert "Database error" in response.json["error"]
+
+
+def test_get_project_details(clean_test_db, create_app):
+    client = create_app[0].test_client()
+    db = create_app[1]
+    data = {
+        "name": "DetailProj",
+        "origin_url": "http://detail.url",
+        "metadata": {"key1": "value1"},
+    }
+    response = client.post("/projects/", json=data)
+    assert response.status_code == 201
+    project_id = response.json["id"]
+
+    response = client.get(f"/projects/{project_id}")
+    assert response.status_code == 200
+    assert response.json["name"] == "DetailProj"
+    assert response.json["origin_url"] == "http://detail.url"
+    assert response.json["metadata"] == {"key1": "value1"}
+
+
+def test_get_nonexistent_project(create_app):
+    client = create_app[0].test_client()
+    response = client.get(f"/projects/{uuid.uuid4()}")
+    assert response.status_code == 404
+    assert "not found" in response.json["error"]
+
+
+def test_get_project_details_sql_error(monkeypatch, clean_test_db, create_app):
+    client = create_app[0].test_client()
+    db = create_app[1]
+    data = {"name": "DetailProj", "origin_url": "http://detail.url"}
+    response = client.post("/projects/", json=data)
+    assert response.status_code == 201
+    project_id = response.json["id"]
+
+    # Simulate SQLAlchemy error on get
+    def raise_sqlalchemy_error(*args, **kwargs):
+        raise sqla_exc.SQLAlchemyError("Simulated DB error")
+
+    monkeypatch.setattr(db.session, "get", raise_sqlalchemy_error)
+
+    response = client.get(f"/projects/{project_id}")
+    assert response.status_code == 500
+    assert "Database error" in response.json["error"]
