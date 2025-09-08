@@ -241,15 +241,16 @@ class DoxyDocHubApiProjectsEndpoint:
                         )
                         return {"error": "Project not found"}, 404
                     project_name = project.name
+                    # First set parent to null for projects that have this project as parent
+                    children = db.session.query(Project).filter_by(parent_id=id)
+                    for child in children:
+                        child.parent_id = None
+                    db.session.flush()
                     # Delete the project
                     db.session.delete(project)
                     # Also delete all associated versions and metadata
                     db.session.query(ProjectVersion).filter_by(project_id=id).delete()
                     db.session.query(ProjectMetadata).filter_by(project_id=id).delete()
-                    # Also set parent to null for projects that have this project as parent
-                    children = db.session.query(Project).filter_by(parent_id=id)
-                    for child in children:
-                        child.parent_id = None
                     db.session.commit()
                     self.logger.info(f"Deleted project {project_name} ({id})")
                     return (
@@ -268,24 +269,70 @@ class DoxyDocHubApiProjectsEndpoint:
             @ns.doc("get_project_tree")
             @ns.response(200, "Success")
             @ns.response(500, "Internal server error")
-            def get(inner_self) -> list[dict[str, typing.Any]]:
+            def get(
+                inner_self,
+            ) -> list[dict[str, typing.Any]] | tuple[dict[str, typing.Any], int]:
                 """Get the project tree structure"""
-                projects = self.db.session.query(Project).all()
+                try:
+                    projects = self.db.session.query(Project).all()
 
-                def build_tree(proj: Project) -> dict[str, typing.Any]:
+                    def build_tree(proj: Project) -> dict[str, typing.Any]:
+                        return {
+                            "id": str(proj.id),
+                            "name": proj.name,
+                            "origin_url": proj.origin_url,
+                            "metadata": {
+                                item.key: item.value for item in proj.metadata_items
+                            },
+                            "children": [build_tree(child) for child in proj.children],
+                        }
+
+                    # Find root projects (those without a parent)
+                    root_projects = [p for p in projects if p.parent_id is None]
+                    tree = [build_tree(p) for p in root_projects]
+                    return tree
+                except sqla_exc.SQLAlchemyError as e:
+                    self.logger.exception("Failed to fetch project tree")
+                    return {"error": "Database error", "details": str(e)}, 500
+
+        @ns.route("/<uuid:project_id>")
+        class ProjectDetail(flask_restx.Resource):  # type: ignore
+            """Show details of a specific project."""
+
+            @ns.doc("get_project")
+            @ns.response(200, "Success")
+            @ns.response(404, "Project not found")
+            @ns.response(500, "Internal server error")
+            def get(
+                innerself, project_id
+            ) -> dict[str, typing.Any] | tuple[dict[str, typing.Any], int]:
+                """Get details of a specific project by ID"""
+
+                try:
+                    project = db.session.get(Project, project_id)
+                    if not project:
+                        return {"error": "Project not found"}, 404
+
                     return {
-                        "id": str(proj.id),
-                        "name": proj.name,
-                        "origin_url": proj.origin_url,
+                        "id": str(project.id),
+                        "name": project.name,
+                        "origin_url": project.origin_url,
+                        "created_at": project.created_at.isoformat(),
                         "metadata": {
-                            item.key: item.value for item in proj.metadata_items
+                            item.key: item.value for item in project.metadata_items
                         },
-                        "children": [build_tree(child) for child in proj.children],
+                        "versions": [
+                            {
+                                "id": str(version.id),
+                                "version": version.version,
+                                "created_at": version.created_at.isoformat(),
+                                "storage_path": version.storage_path,
+                            }
+                            for version in project.versions
+                        ],
                     }
-
-                # Find root projects (those without a parent)
-                root_projects = [p for p in projects if p.parent_id is None]
-                tree = [build_tree(p) for p in root_projects]
-                return tree
+                except sqla_exc.SQLAlchemyError as e:
+                    self.logger.exception("Failed to fetch project details")
+                    return {"error": "Database error", "details": str(e)}, 500
 
         api.add_namespace(ns, path=f"/{self.ENDPOINT}")
