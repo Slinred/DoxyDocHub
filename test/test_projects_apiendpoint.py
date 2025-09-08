@@ -209,3 +209,62 @@ def test_update_project_sql_error(monkeypatch, clean_test_db, create_app):
     assert project.name == "TestProj"
     assert project.origin_url == "http://test.url"
     assert project.metadata_items == []
+
+
+def test_delete_project(clean_test_db, create_app):
+    client = create_app[0].test_client()
+    db = create_app[1]
+    data = {"name": "TestProj", "origin_url": "http://test.url"}
+    response = client.post("/projects/", json=data)
+    assert response.status_code == 201
+    project_id = response.json["id"]
+
+    data = {
+        "name": "ChildTestProj",
+        "origin_url": "http://testchild.url",
+        "parent_id": project_id,
+    }
+    response = client.post("/projects/", json=data)
+    assert response.status_code == 201
+    child_project_id = response.json["id"]
+
+    # Delete project
+    response = client.delete(f"/projects/", json={"id": project_id})
+    assert response.status_code == 200
+
+    # Verify deletion
+    project = db.session.query(Project).filter_by(id=project_id).first()
+    assert project is None
+    child_project = db.session.query(Project).filter_by(id=child_project_id).first()
+    assert child_project is not None
+    assert child_project.parent_id is None
+
+
+def test_delete_nonexistent_project(create_app):
+    client = create_app[0].test_client()
+    response = client.delete(f"/projects/", json={"id": uuid.uuid4()})
+    assert response.status_code == 404
+    assert "not found" in response.json["error"]
+
+
+def test_delete_project_sql_error(monkeypatch, clean_test_db, create_app):
+    client = create_app[0].test_client()
+    db = create_app[1]
+    data = {"name": "TestProj", "origin_url": "http://test.url"}
+    response = client.post("/projects/", json=data)
+    assert response.status_code == 201
+    project_id = response.json["id"]
+
+    # Simulate SQLAlchemy error on commit
+    def raise_sqlalchemy_error(*args, **kwargs):
+        raise sqla_exc.SQLAlchemyError("Simulated DB error")
+
+    monkeypatch.setattr(db.session, "commit", raise_sqlalchemy_error)
+
+    response = client.delete(f"/projects/", json={"id": project_id})
+    assert response.status_code == 500
+    assert "Database error" in response.json["error"]
+
+    # Verify that project was not deleted
+    project = db.session.query(Project).filter_by(id=project_id).first()
+    assert project is not None

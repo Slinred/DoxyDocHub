@@ -85,6 +85,15 @@ class DoxyDocHubApiProjectsEndpoint:
             },
         )
 
+        project_id_model = ns.model(
+            "ProjectID",
+            {
+                "id": flask_restx.fields.String(
+                    required=True, description="Project ID (UUIDv4)"
+                )
+            },
+        )
+
         @ns.route("/")
         class ProjectList(flask_restx.Resource):  # type: ignore
             """Shows a list of all projects, and lets you POST to add new projects."""
@@ -206,6 +215,46 @@ class DoxyDocHubApiProjectsEndpoint:
                     return (
                         project.to_dict(),
                         result,
+                    )
+                except sqla_exc.SQLAlchemyError as e:
+                    db.session.rollback()
+                    self.logger.exception("Failed to update project")
+                    return {"error": "Database error", "details": str(e)}, 500
+
+            @ns.doc("delete_project")
+            @ns.response(200, "Project deleted successfully")
+            @ns.response(400, "Invalid input")
+            @ns.response(404, "Project not found")
+            @ns.response(500, "Internal server error")
+            @ns.expect(project_id_model, validate=True)
+            def delete(inner_self) -> tuple[dict[str, typing.Any], int]:
+                """Deletes an existing project"""
+                data: dict[str, typing.Any] = flask.request.get_json()
+
+                id = data.get("id")
+
+                try:
+                    project = db.session.query(Project).filter_by(id=id).first()
+                    if not project:
+                        self.logger.info(
+                            f"Project with ID {id} not found! Cannot delete."
+                        )
+                        return {"error": "Project not found"}, 404
+                    project_name = project.name
+                    # Delete the project
+                    db.session.delete(project)
+                    # Also delete all associated versions and metadata
+                    db.session.query(ProjectVersion).filter_by(project_id=id).delete()
+                    db.session.query(ProjectMetadata).filter_by(project_id=id).delete()
+                    # Also set parent to null for projects that have this project as parent
+                    children = db.session.query(Project).filter_by(parent_id=id)
+                    for child in children:
+                        child.parent_id = None
+                    db.session.commit()
+                    self.logger.info(f"Deleted project {project_name} ({id})")
+                    return (
+                        {},
+                        200,
                     )
                 except sqla_exc.SQLAlchemyError as e:
                     db.session.rollback()
