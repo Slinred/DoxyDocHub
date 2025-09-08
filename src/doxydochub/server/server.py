@@ -7,6 +7,7 @@ from .server_config import DoxyDocHubConfig
 from ..api.doxydochubapi import DoxyDocHubApi
 
 from ..database.database import DoxyDocHubDatabase
+from ..database.database_schema import Project
 
 
 class DoxyDocHubServer:
@@ -19,6 +20,8 @@ class DoxyDocHubServer:
         self._app = Flask(
             __name__,
             template_folder=pathlib.Path(__file__).parent / self.HTML_TEMPLATE_PATH,
+            static_folder=pathlib.Path(__file__).parent / "static",
+            static_url_path="/static",
         )
 
         self._config = config
@@ -33,7 +36,13 @@ class DoxyDocHubServer:
     def _setup_routes(self):
         @self._app.route("/")
         def index():  # type: ignore
-            return "Welcome to DoxyDocHub!"
+            return render_template(
+                "index.html",
+                projects=self._db.session.query(Project)
+                .filter(Project.parent_id == None)
+                .all(),
+                version=self._version,
+            )
 
         @self._app.route("/info")
         def info():  # type: ignore

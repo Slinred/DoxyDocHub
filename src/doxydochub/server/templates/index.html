@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>📚 DoxyDocHub</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <header>
+        <h1><i class="fa-solid fa-book"></i> DoxyDocHub</h1>
+    </header>
+
+    <main>
+        <aside class="sidebar">
+            <h2>Projects</h2>
+            <ul class="project-tree">
+                {% for project in projects recursive %}
+                <li class="tree-item {% if project.children %}has-children{% endif %}">
+                    <div class="tree-label">
+                        {% if project.children %}
+                        <i class="fa-solid fa-caret-right toggle"></i>
+                        {% else %}
+                        <i class="fa-solid fa-circle"></i>
+                        {% endif %}
+                        <i class="fa-solid fa-diagram-project"></i>
+                        {{ project.name }}
+                    </div>
+                    {% if project.children %}
+                    <ul class="nested">
+                        {{ loop(project.children) }}
+                    </ul>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </aside>
+
+        <section class="content">
+            <h2>Welcome</h2>
+            <p>Select a project from the left to view details.</p>
+        </section>
+    </main>
+
+    <footer>
+        <span>DoxyDocHub v{{ version }}</span>
+    </footer>
+
+    <script src="{{ url_for('static', filename='tree.js') }}"></script>
+</body>
+</html>
