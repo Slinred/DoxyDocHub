@@ -268,3 +268,62 @@ def test_delete_project_sql_error(monkeypatch, clean_test_db, create_app):
     # Verify that project was not deleted
     project = db.session.query(Project).filter_by(id=project_id).first()
     assert project is not None
+
+
+def test_project_tree(clean_test_db, create_app):
+    client = create_app[0].test_client()
+    data = {"name": "RootProj", "origin_url": "http://root.url"}
+    response = client.post("/projects/", json=data)
+    assert response.status_code == 201
+    root_id = response.json["id"]
+
+    data = {
+        "name": "ChildProj1",
+        "origin_url": "http://child1.url",
+        "parent_id": root_id,
+    }
+    response = client.post("/projects/", json=data)
+    assert response.status_code == 201
+    child1_id = response.json["id"]
+
+    data = {
+        "name": "ChildProj2",
+        "origin_url": "http://child2.url",
+        "parent_id": root_id,
+    }
+    response = client.post("/projects/", json=data)
+    assert response.status_code == 201
+    child2_id = response.json["id"]
+
+    data = {
+        "name": "GrandChildProj",
+        "origin_url": "http://grandchild.url",
+        "parent_id": child1_id,
+    }
+    response = client.post("/projects/", json=data)
+    assert response.status_code == 201
+    grandchild_id = response.json["id"]
+
+    data = {"name": "AnotherRootProj", "origin_url": "http://anotherroot.url"}
+    response = client.post("/projects/", json=data)
+    assert response.status_code == 201
+    another_root_id = response.json["id"]
+
+    # Get project tree
+    response = client.get("/projects/tree")
+    assert response.status_code == 200
+    tree = response.json
+    assert len(tree) == 2  # Two root projects
+    assert tree[0]["id"] == root_id
+    assert tree[1]["id"] == another_root_id
+    assert len(tree[0]["children"]) == 2
+    child_ids = {child["id"] for child in tree[0]["children"]}
+    assert child1_id in child_ids
+    assert child2_id in child_ids
+
+    for child in tree[0]["children"]:
+        if child["id"] == child1_id:
+            assert len(child["children"]) == 1
+            assert child["children"][0]["id"] == grandchild_id
+        else:
+            assert len(child["children"]) == 0

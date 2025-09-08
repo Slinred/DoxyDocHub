@@ -95,8 +95,8 @@ class DoxyDocHubApiProjectsEndpoint:
         )
 
         @ns.route("/")
-        class ProjectList(flask_restx.Resource):  # type: ignore
-            """Shows a list of all projects, and lets you POST to add new projects."""
+        class Projects(flask_restx.Resource):  # type: ignore
+            """Shows a list of all projects, and lets you POST to add new projects, PUT to update existing ones and DELETE to remove existing ones."""
 
             @ns.doc("list_projects")
             def get(inner_self) -> list[dict[str, typing.Any]]:
@@ -260,5 +260,32 @@ class DoxyDocHubApiProjectsEndpoint:
                     db.session.rollback()
                     self.logger.exception("Failed to update project")
                     return {"error": "Database error", "details": str(e)}, 500
+
+        @ns.route("/tree")
+        class ProjectTree(flask_restx.Resource):  # type: ignore
+            """Shows the project tree structure."""
+
+            @ns.doc("get_project_tree")
+            @ns.response(200, "Success")
+            @ns.response(500, "Internal server error")
+            def get(inner_self) -> list[dict[str, typing.Any]]:
+                """Get the project tree structure"""
+                projects = self.db.session.query(Project).all()
+
+                def build_tree(proj: Project) -> dict[str, typing.Any]:
+                    return {
+                        "id": str(proj.id),
+                        "name": proj.name,
+                        "origin_url": proj.origin_url,
+                        "metadata": {
+                            item.key: item.value for item in proj.metadata_items
+                        },
+                        "children": [build_tree(child) for child in proj.children],
+                    }
+
+                # Find root projects (those without a parent)
+                root_projects = [p for p in projects if p.parent_id is None]
+                tree = [build_tree(p) for p in root_projects]
+                return tree
 
         api.add_namespace(ns, path=f"/{self.ENDPOINT}")

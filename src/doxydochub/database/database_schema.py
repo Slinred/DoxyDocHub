@@ -65,7 +65,9 @@ class Project(DataBaseSchema):
     )
 
     parent_id = Column(GUID(), ForeignKey("projects.id"), nullable=True)  # type: ignore
-    parent = relationship("Project", remote_side=[id], backref="children")  # type: ignore
+
+    parent = relationship("Project", remote_side=[id], back_populates="children")
+    children = relationship("Project", back_populates="parent", cascade="all, delete")
 
     versions = relationship(
         "ProjectVersion",
@@ -106,7 +108,9 @@ class Project(DataBaseSchema):
             "latest_version": (
                 self.latest_version.version if self.latest_version else None
             ),
-            "parent": self.parent.to_dict() if self.parent else None,
+            "parent": self.parent.id if self.parent else None,
+            "children": [child.id for child in self.children],
+            "versions": [v.id for v in self.versions],
             "metadata": {item.key: item.value for item in self.metadata_items},
         }
 
@@ -124,6 +128,14 @@ class ProjectVersion(DataBaseSchema):
         "Project", back_populates="versions", foreign_keys=[project_id]
     )
 
+    def to_dict(self) -> dict[str, typing.Any]:
+        return {
+            "id": str(self.id),
+            "version": self.version,
+            "created_at": self.created_at.isoformat(),
+            "storage_path": self.storage_path,
+        }
+
 
 class ProjectMetadata(DataBaseSchema):
     __tablename__ = "project_metadata"
@@ -134,6 +146,14 @@ class ProjectMetadata(DataBaseSchema):
     value = Column(Text, nullable=False)
 
     project = relationship("Project", back_populates="metadata_items")
+
+    def to_dict(self) -> dict[str, typing.Any]:
+        return {
+            "id": str(self.id),
+            "project_id": str(self.project_id),
+            "key": self.key,
+            "value": self.value,
+        }
 
 
 # after insert on ProjectVersion, update the project's latest_version_id
