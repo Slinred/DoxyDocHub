@@ -46,15 +46,19 @@ def main(loglevel: str):
 def serve(config: str, debug: bool):
     """Start the DoxyDocHub web server."""
 
-    server_cfg = DoxyDocHubConfig()
-    server_cfg.load(config)
+    try:
+        server_cfg = DoxyDocHubConfig()
+        server_cfg.load(config)
 
-    click.echo(
-        f"🚀 Starting DoxyDocHub at http://{server_cfg.server.host}:{server_cfg.server.port} (debug={debug})"
-    )
+        click.echo(
+            f"🚀 Starting DoxyDocHub at http://{server_cfg.server.host}:{server_cfg.server.port} (debug={debug})"
+        )
 
-    server = DoxyDocHubServer(server_cfg)
-    server.run()
+        server = DoxyDocHubServer(server_cfg)
+        server.run()
+    except Exception as e:
+        click.echo(f"❌ Failed to start server: {e}")
+        raise click.Abort()
 
 
 @main.command()
