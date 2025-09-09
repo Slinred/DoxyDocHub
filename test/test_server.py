@@ -1,6 +1,7 @@
 from flask import Flask
 import pytest
 import os
+from unittest.mock import MagicMock
 
 from doxydochub.server.server import (
     DoxyDocHubServer,
@@ -50,6 +51,10 @@ class DummyDB(DoxyDocHubDatabase):
         pass
 
     @property
+    def session(self):
+        return MagicMock()
+
+    @property
     def schema_version(self):
         return "abc"
 
@@ -75,6 +80,10 @@ def test_server_app_creation(monkeypatch):
 def test_server_index_route(monkeypatch):
     monkeypatch.setattr("doxydochub.server.server.DoxyDocHubApi", DummyApi)
     monkeypatch.setattr("doxydochub.server.server.DoxyDocHubDatabase", DummyDB)
+    monkeypatch.setattr(
+        "doxydochub.server.server.render_template",
+        lambda template, **kwargs: "Welcome to DoxyDocHub!",
+    )
 
     server = DoxyDocHubServer(DummyConfig())
     client = server._app.test_client()
