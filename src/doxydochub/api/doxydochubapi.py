@@ -37,9 +37,13 @@ class DoxyDocHubApi:
     def _register_endpoints(self):
         from .endpoints.projects_apiendpoint import DoxyDocHubApiProjectsEndpoint
         from .endpoints.config_apiendpoint import DoxyDocHubApiConfigEndpoint
+        from .endpoints.versions_apiendpoint import DoxyDocHubApiVersionsEndpoint
 
         DoxyDocHubApiConfigEndpoint(self._api, self._server_config)
         DoxyDocHubApiProjectsEndpoint(self._api, self._db, config=None)
+        DoxyDocHubApiVersionsEndpoint(
+            self._api, self._db, self._server_config, config=None
+        )
 
     def register_api(self, app: flask.Flask):
         app.register_blueprint(self._bp)

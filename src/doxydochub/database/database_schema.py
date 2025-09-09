@@ -122,7 +122,7 @@ class ProjectVersion(DataBaseSchema):
     version = Column(String(255), nullable=False)
     project_id = Column(GUID(), ForeignKey("projects.id"), nullable=False)  # type: ignore
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    storage_path = Column(Text, nullable=False)
+    storage_path = Column(Text, nullable=True)
 
     project = relationship(
         "Project", back_populates="versions", foreign_keys=[project_id]
@@ -134,6 +134,7 @@ class ProjectVersion(DataBaseSchema):
             "version": self.version,
             "created_at": self.created_at.isoformat(),
             "storage_path": self.storage_path,
+            "project_id": str(self.project_id),
         }
 
 
