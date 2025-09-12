@@ -1,13 +1,14 @@
 import pathlib
 import sys
+import os
 
-from flask import Flask, render_template
+from flask import Flask, render_template, send_from_directory, abort
 
 from .server_config import DoxyDocHubConfig
 from ..api.doxydochubapi import DoxyDocHubApi
 
 from ..database.database import DoxyDocHubDatabase
-from ..database.database_schema import Project
+from ..database.database_schema import Project, ProjectVersion
 
 
 class DoxyDocHubServer:
@@ -63,6 +64,27 @@ class DoxyDocHubServer:
                 db_url=self._db.database_url,
                 db_size=self._db.database_size,
             )
+
+        @self._app.route(
+            "/docs/<string:project_id>/<string:version_id>/<path:filename>"
+        )
+        def serve_docs(project_id, version_id, filename):
+            # Look up the ProjectVersion in the DB
+            version = (
+                self._db.session.query(ProjectVersion)
+                .filter_by(id=version_id, project_id=project_id)
+                .first()
+            )
+            if not version or not version.storage_path:
+                abort(404, description="Version not found or no docs uploaded")
+
+            # Make sure the file exists in the storage path
+            base_path = version.storage_path
+            file_path = os.path.join(base_path, filename)
+            if not os.path.exists(file_path):
+                abort(404, description="File not found")
+
+            return send_from_directory(base_path, filename)
 
     def run(self, host: str = "0.0.0.0", port: int = 8099, debug: bool = False):
         self._app.run(host=host, port=port, debug=debug)

@@ -42,32 +42,60 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function renderProjectDetails(project) {
     const content = document.getElementById("project-content");
-    content.innerHTML = `
-        <h2><i class="fa-solid fa-diagram-project"></i> ${project.name}</h2>
+    content.innerHTML = "";
 
-        <div class="card">
-            <h3><i class="fa-solid fa-info-circle"></i> Generic Info</h3>
-            <p><strong>Origin:</strong> <a href="${project.origin_url}" target="_blank">${project.origin_url}</a></p>
-            <p><strong>Created at:</strong> ${new Date(project.created_at).toLocaleString()}</p>
-        </div>
+    const title = document.createElement("h2");
+    title.textContent = `Project: ${project.name}`;
+    content.appendChild(title);
 
-        <div class="card">
-            <h3><i class="fa-solid fa-key"></i> Metadata</h3>
-            <ul class="metadata-list">
-                ${Object.entries(project.metadata).map(([k,v]) => `<li><strong>${k}:</strong> ${v}</li>`).join("")}
-            </ul>
-        </div>
+    const grid = document.createElement("div");
+    grid.className = "grid";
 
-        <div class="card">
-            <h3><i class="fa-solid fa-code-branch"></i> Versions</h3>
-            <ul class="versions-list">
-                ${project.versions.map(v => `
-                    <li class="${project.latest_version_id === v.id ? 'latest-version' : ''}">
-                        <i class="fa-solid fa-circle${project.latest_version_id === v.id ? '' : '-dot'}"></i>
-                        ${v.version} <span class="version-date">(${new Date(v.created_at).toLocaleString()})</span>
-                    </li>
-                `).join("")}
-            </ul>
-        </div>
+    // --- Generic Info Card ---
+    const genericCard = document.createElement("div");
+    genericCard.className = "card";
+    genericCard.innerHTML = `
+        <h3>Generic Info</h3>
+        <p><strong>Origin URL:</strong> ${project.origin_url}</p>
+        <p><strong>Created At:</strong> ${project.created_at}</p>
     `;
+    grid.appendChild(genericCard);
+
+    // --- Metadata Card ---
+    const metadataCard = document.createElement("div");
+    metadataCard.className = "card";
+    metadataCard.innerHTML = `<h3>Metadata</h3>`;
+    const metadataList = document.createElement("ul");
+    for (const [key, value] of Object.entries(project.metadata)) {
+        const li = document.createElement("li");
+        li.textContent = `${key}: ${value}`;
+        metadataList.appendChild(li);
+    }
+    metadataCard.appendChild(metadataList);
+    grid.appendChild(metadataCard);
+
+    // --- Versions Card ---
+    const versionsCard = document.createElement("div");
+    versionsCard.className = "card";
+    versionsCard.innerHTML = `<h3>Versions</h3>`;
+    const versionList = document.createElement("ul");
+
+    project.versions.forEach(version => {
+        const li = document.createElement("li");
+        li.textContent = version.version;
+
+        if (version.has_docs) {
+            const link = document.createElement("a");
+            link.href = `/docs/${project.id}/${version.id}/index.html`;
+            link.target = "_blank";
+            link.textContent = " (Open Docs)";
+            li.appendChild(link);
+        }
+        versionList.appendChild(li);
+    });
+
+    versionsCard.appendChild(versionList);
+    grid.appendChild(versionsCard);
+
+    content.appendChild(grid);
 }

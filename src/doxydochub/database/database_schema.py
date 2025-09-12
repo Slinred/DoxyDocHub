@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 import typing
+import os
 
 from sqlalchemy import (
     Column,
@@ -128,13 +129,21 @@ class ProjectVersion(DataBaseSchema):
         "Project", back_populates="versions", foreign_keys=[project_id]
     )
 
+    def has_docs(self) -> bool:
+        if self.storage_path:
+            index_path = os.path.join(self.storage_path, "index.html")
+            return os.path.exists(index_path)
+        return False
+
     def to_dict(self) -> dict[str, typing.Any]:
+
         return {
             "id": str(self.id),
             "version": self.version,
             "created_at": self.created_at.isoformat(),
             "storage_path": self.storage_path,
             "project_id": str(self.project_id),
+            "has_docs": self.has_docs(),
         }
 
 

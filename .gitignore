@@ -118,3 +118,10 @@ cython_debug/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Project specific
+data/
+build/
+logs/
+*.db
+*.sqlite3

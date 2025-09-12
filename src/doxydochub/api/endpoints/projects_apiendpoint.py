@@ -205,15 +205,7 @@ class DoxyDocHubApiProjectsEndpoint:
                         "metadata": {
                             item.key: item.value for item in project.metadata_items
                         },
-                        "versions": [
-                            {
-                                "id": str(version.id),
-                                "version": version.version,
-                                "created_at": version.created_at.isoformat(),
-                                "storage_path": version.storage_path,
-                            }
-                            for version in project.versions
-                        ],
+                        "versions": [version.to_dict() for version in project.versions],
                     }
                 except sqla_exc.SQLAlchemyError as e:
                     self.logger.exception("Failed to fetch project details")
