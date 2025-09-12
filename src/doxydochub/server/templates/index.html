@@ -3,13 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <title>📚 DoxyDocHub</title>
+    <link rel="icon" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}">
+    <link rel="icon" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="//code.iconify.design/1/1.0.6/iconify.min.js"></script>
 </head>
 <body>
     <header>
-        <h1><i class="fa-solid fa-book"></i> DoxyDocHub</h1>
+        <div class="header-content">
+            <h1>
+                <span class="header-icon iconify" data-icon="mdi:bookshelf"></span>
+                <span class="header-title-text">DoxyDocHub</span>
+            </h1>
+            <div class="header-subtitle">
+                The doxygen documentation hub for your projects!
+            </div>
+        </div>
     </header>
+
 
     <main>
         <aside class="sidebar">
@@ -18,9 +30,10 @@
                 <li class="tree-item {% if project.children %}has-children{% endif %}" data-id="{{ project.id }}">
                     <div class="tree-label">
                         {% if project.children %}
-                        <i class="fa-solid fa-caret-right toggle"></i>
+                        <span class="tree-book-icon"><span class="iconify" data-icon="mdi:book-plus-multiple"></span></span>
+                        {% else %}
+                        <span class="iconify" data-icon="mdi:book"></span>
                         {% endif %}
-                        <i class="fa-solid fa-diagram-project"></i>
                         {{ project.name }}
                     </div>
                     {% if project.children %}

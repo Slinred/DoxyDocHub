@@ -1,18 +1,18 @@
 document.addEventListener("DOMContentLoaded", () => {
-    const toggles = document.querySelectorAll(".tree-item.has-children > .tree-label .toggle");
+    const bookIcons = document.querySelectorAll(".tree-item.has-children > .tree-label .tree-book-icon");
 
-    toggles.forEach(toggle => {
-        toggle.addEventListener("click", (event) => {
+    bookIcons.forEach(bookIcon => {
+        bookIcon.addEventListener("click", (event) => {
             event.stopPropagation();
-            const parent = toggle.closest(".tree-item");
+            const parent = bookIcon.closest(".tree-item");
             const nested = parent.querySelector(".nested");
             nested.classList.toggle("active");
 
-            // Switch caret icon
+            // Switch book icon
             if (nested.classList.contains("active")) {
-                toggle.classList.replace("fa-caret-right", "fa-caret-down");
+                bookIcon.innerHTML = `<span class="iconify" data-icon="mdi:book-minus-multiple"></span>`;
             } else {
-                toggle.classList.replace("fa-caret-down", "fa-caret-right");
+                bookIcon.innerHTML = `<span class="iconify" data-icon="mdi:book-plus-multiple"></span>`;
             }
         });
     });
@@ -82,20 +82,148 @@ function renderProjectDetails(project) {
 
     project.versions.forEach(version => {
         const li = document.createElement("li");
-        li.textContent = version.version;
+        li.className = "version-item";
+        const nameSpan = document.createElement("span");
+        nameSpan.innerHTML = version.version + " <span class='iconify' data-icon='mdi:arrow-right-thin'></span>";
+        nameSpan.classList.add("version-name");
+        // nameSpan.style.cursor = "pointer";
+        li.appendChild(nameSpan);
 
         if (version.has_docs) {
+            const iframeSpan = document.createElement("span");
+            iframeSpan.className ="version-doc-link";
+            iframeSpan.title = "View in embedded frame";
+            iframeSpan.style.cursor = "pointer";
+            iframeSpan.addEventListener("click", () => {
+                showVersionInContent(project, version);
+            });
+            iframeSpan.innerHTML = `<span class="iconify" data-icon="mdi:book-open-page-variant"></span>`;
+            li.appendChild(iframeSpan);
+
             const link = document.createElement("a");
+            link.className = "version-doc-link";
             link.href = `/docs/${project.id}/${version.id}/index.html`;
             link.target = "_blank";
-            link.textContent = " (Open Docs)";
+            link.innerHTML = ` <span class="iconify" data-icon="mdi:open-in-new"></span>`;
             li.appendChild(link);
         }
+        else {
+            const noDocsSpan = document.createElement("span");
+            noDocsSpan.style.color = "#888";
+            noDocsSpan.style.marginLeft = "8px";
+            noDocsSpan.textContent = "(no docs)";
+            li.appendChild(noDocsSpan);
+        }
+
         versionList.appendChild(li);
     });
+
 
     versionsCard.appendChild(versionList);
     grid.appendChild(versionsCard);
 
     content.appendChild(grid);
+}
+
+function showVersionInContent(project, version) {
+    const content = document.getElementById("project-content");
+    content.innerHTML = `
+        <div class="version-header">
+            <button class="back-btn">⬅ Back</button>
+            <h2>${project.name} – ${version.version}</h2>
+        </div>
+        <div id="iframe-loader" class="loader">
+            <svg class="spinner" viewBox="0 0 50 50">
+                <circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="5"></circle>
+            </svg>
+            <p>Loading documentation...</p>
+        </div>
+        <iframe id="docs-frame" src="/docs/${project.id}/${version.id}/index.html" class="hidden"></iframe>
+    `;
+
+    // Back button → re-render project details
+    content.querySelector(".back-btn").addEventListener("click", () => {
+        renderProjectDetails(project);
+    });
+
+    const iframe = document.getElementById("docs-frame");
+    const loader = document.getElementById("iframe-loader");
+    iframe.onload = () => {
+        loader.style.display = "none";
+        iframe.classList.remove("hidden");
+    };
+
+  // Setup handlers to force navigation INSIDE the iframe.
+  // This will run after each load so it applies for dynamically loaded pages too.
+  iframe.addEventListener("load", () => {
+    try {
+      const doc = iframe.contentDocument;
+      const win = iframe.contentWindow;
+
+      // Remove any <base target="..."> that might force top navigation
+      try {
+        const base = doc.querySelector("base[target]");
+        if (base) base.removeAttribute("target");
+      } catch (e) { /* ignore */ }
+
+      // Force all anchors to open in same frame and intercept clicks.
+      try {
+        doc.querySelectorAll("a").forEach(a => a.target = "_self");
+      } catch (e) { /* ignore */ }
+
+      // Override window.open inside iframe so JS opening windows stays inside iframe
+      try {
+        win.open = function(url, target, features) {
+          // compute absolute url relative to current iframe location
+          const newUrl = new URL(url, win.location.href).toString();
+          win.location.href = newUrl;
+          return null;
+        };
+      } catch (e) { /* ignore */ }
+
+      // Intercept click events on anchors (capturing) and force the iframe to navigate,
+      // this covers anchors added dynamically or anchors with onclick handlers.
+      try {
+        // Remove previous listener if any (idempotent)
+        if (win.__doxydochub_nav_listener_installed) {
+          // nothing — we keep single installation guard
+        } else {
+          doc.addEventListener("click", function(e) {
+            const a = e.target.closest && e.target.closest("a");
+            if (!a) return;
+
+            // ignore if anchor is just an in-page anchor (#) or javascript:
+            const href = a.getAttribute("href");
+            if (!href || href.startsWith("javascript:") || href === "#") return;
+
+            // Prevent top-level navigation / new tab
+            e.preventDefault();
+            e.stopPropagation();
+
+            // resolve full URL relative to iframe document and navigate inside iframe
+            const newUrl = new URL(href, doc.location.href).toString();
+            win.location.href = newUrl;
+          }, true);
+
+          // mark installed to avoid duplicate listeners after subsequent loads
+          win.__doxydochub_nav_listener_installed = true;
+        }
+      } catch (e) { /* ignore */ }
+
+      // Make forms submit inside iframe
+      try {
+        doc.querySelectorAll("form").forEach(form => form.setAttribute("target", "_self"));
+      } catch (e) { /* ignore */ }
+
+    } catch (err) {
+      // Accessing iframe content failed — probably cross-origin. Log once.
+      console.warn("DoxyDocHub: cannot access iframe content (cross-origin?), navigation won't be intercepted.", err);
+      // If cross-origin, we can't force links — consider opening in new tab instead.
+    } finally {
+      // Hide loader and show iframe (we do this regardless — if content not accessible it's still loaded)
+      loader.style.display = "none";
+      iframe.classList.remove("hidden");
+    }
+  });
+
 }
