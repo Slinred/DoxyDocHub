@@ -66,13 +66,21 @@ class DoxyDocHubServer:
             )
 
         @self._app.route(
-            "/docs/<string:project_id>/<string:version_id>/<path:filename>"
+            "/docs/<string:project_slug>/<string:version_slug>/<path:filename>"
         )
-        def serve_docs(project_id, version_id, filename):
+        def serve_docs(project_slug, version_slug, filename):
+            project = (
+                self._db.session.query(Project)
+                .filter_by(name_slug=project_slug)
+                .first()
+            )
+            if not project:
+                abort(404, description="Project not found")
+
             # Look up the ProjectVersion in the DB
             version = (
                 self._db.session.query(ProjectVersion)
-                .filter_by(id=version_id, project_id=project_id)
+                .filter_by(version_slug=version_slug, project_id=project.id)
                 .first()
             )
             if not version or not version.storage_path:

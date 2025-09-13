@@ -2,16 +2,21 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>📚 DoxyDocHub</title>
-    <link rel="icon" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}">
-    <link rel="icon" sizes="16x16" href="{{ url_for('static', filename='favicon-16.png') }}">
+    <title>DoxyDocHub</title>
+
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <script src="//code.iconify.design/1/1.0.6/iconify.min.js"></script>
 </head>
 <body>
     <header>
-        <div class="header-content">
+        <div class="header-left">
             <h1>
                 <span class="header-icon iconify" data-icon="mdi:bookshelf"></span>
                 <span class="header-title-text">DoxyDocHub</span>
@@ -19,6 +24,14 @@
             <div class="header-subtitle">
                 The doxygen documentation hub for your projects!
             </div>
+        </div>
+        <div class="header-right">
+            <a href="/info" class="info-button header-button" title="System Information">
+                <span class="iconify" data-icon="mdi:information" style="vertical-align: middle;"></span>
+            </a>
+            <a href="/api" class="api-button header-button" title="API Documentation">
+                <span class="iconify" data-icon="mdi:api" style="vertical-align: middle;"></span>
+            </a>
         </div>
     </header>
 

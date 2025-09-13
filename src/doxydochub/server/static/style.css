@@ -13,15 +13,19 @@ body {
 header {
     background-color: #004d99;
     color: white;
-    padding: 0.5rem;
+    width: 100%;
+    align-items: center;
+    padding: 0.5rem 1rem;
     font-size: 1.5rem;
     display: flex;
-    align-items: center;
+    justify-content: space-between;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    box-sizing: border-box;   /* prevents padding from adding extra width */
+    overflow-x: hidden;       /* extra safety */
 }
 
 /* Header content wrapper */
-.header-content {
+.header-left {
     display: flex;
     flex-direction: column;
 }
@@ -48,6 +52,28 @@ header h1 {
     color: #e0eafc;
     margin-left: 0.5rem;      /* align with text, matches spacing after icon */
     margin-top: 0.2rem;
+}
+
+.header-right {
+    flex: 0 0 auto;
+}
+
+.header-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background-color: #3498db;
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+
+.header-button:hover {
+    background-color: #2980b9;
 }
 
 /* Main content area */

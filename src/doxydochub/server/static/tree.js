@@ -102,7 +102,7 @@ function renderProjectDetails(project) {
 
             const link = document.createElement("a");
             link.className = "version-doc-link";
-            link.href = `/docs/${project.id}/${version.id}/index.html`;
+            link.href = `/docs/${project.name_slug}/${version.version_slug}/index.html`;
             link.target = "_blank";
             link.innerHTML = ` <span class="iconify" data-icon="mdi:open-in-new"></span>`;
             li.appendChild(link);
@@ -138,7 +138,7 @@ function showVersionInContent(project, version) {
             </svg>
             <p>Loading documentation...</p>
         </div>
-        <iframe id="docs-frame" src="/docs/${project.id}/${version.id}/index.html" class="hidden"></iframe>
+        <iframe id="docs-frame" src="/docs/${project.name_slug}/${version.version_slug}/index.html" class="hidden"></iframe>
     `;
 
     // Back button → re-render project details

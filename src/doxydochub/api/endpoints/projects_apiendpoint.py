@@ -197,16 +197,7 @@ class DoxyDocHubApiProjectsEndpoint:
                     if not project:
                         return {"error": "Project not found"}, 404
 
-                    return {
-                        "id": str(project.id),
-                        "name": project.name,
-                        "origin_url": project.origin_url,
-                        "created_at": project.created_at.isoformat(),
-                        "metadata": {
-                            item.key: item.value for item in project.metadata_items
-                        },
-                        "versions": [version.to_dict() for version in project.versions],
-                    }
+                    return project.to_dict()
                 except sqla_exc.SQLAlchemyError as e:
                     self.logger.exception("Failed to fetch project details")
                     return {"error": "Database error", "details": str(e)}, 500

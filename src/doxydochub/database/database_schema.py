@@ -15,6 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, declarative_base
+import slugify
 
 DataBaseSchema = declarative_base()
 
@@ -56,7 +57,8 @@ class Project(DataBaseSchema):
     __tablename__ = "projects"
 
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)  # type: ignore
-    name = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=False, unique=True)
+    name_slug = Column(String(255), nullable=False, unique=True)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
     origin_url = Column(Text, nullable=False)
     latest_version_id = Column(
@@ -85,6 +87,11 @@ class Project(DataBaseSchema):
         "ProjectMetadata", back_populates="project", cascade="all, delete-orphan"
     )
 
+    def __init__(self, name, **kwargs):
+        super().__init__(**kwargs)
+        self.name = name
+        self.name_slug = slugify.slugify(self.name, lowercase=False)
+
     def update_metadata(self, new_metadata: dict[str, str]) -> None:
         existing_keys = {item.key: item for item in self.metadata_items}
         for key, value in new_metadata.items():
@@ -104,6 +111,7 @@ class Project(DataBaseSchema):
         return {
             "id": str(self.id),
             "name": self.name,
+            "name_slug": self.name_slug,
             "created_at": self.created_at.isoformat(),
             "origin_url": self.origin_url,
             "latest_version": (
@@ -111,7 +119,7 @@ class Project(DataBaseSchema):
             ),
             "parent": self.parent.id if self.parent else None,
             "children": [child.id for child in self.children],
-            "versions": [v.id for v in self.versions],
+            "versions": [v.to_dict() for v in self.versions],
             "metadata": {item.key: item.value for item in self.metadata_items},
         }
 
@@ -120,7 +128,8 @@ class ProjectVersion(DataBaseSchema):
     __tablename__ = "project_versions"
 
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)  # type: ignore
-    version = Column(String(255), nullable=False)
+    version = Column(String(255), nullable=False, unique=False)
+    version_slug = Column(String(255), nullable=False, unique=False)
     project_id = Column(GUID(), ForeignKey("projects.id"), nullable=False)  # type: ignore
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
     storage_path = Column(Text, nullable=True)
@@ -128,6 +137,11 @@ class ProjectVersion(DataBaseSchema):
     project = relationship(
         "Project", back_populates="versions", foreign_keys=[project_id]
     )
+
+    def __init__(self, version, **kwargs):
+        super().__init__(**kwargs)
+        self.version = version
+        self.version_slug = slugify.slugify(self.version, lowercase=False)
 
     def has_docs(self) -> bool:
         if self.storage_path:
@@ -140,6 +154,7 @@ class ProjectVersion(DataBaseSchema):
         return {
             "id": str(self.id),
             "version": self.version,
+            "version_slug": self.version_slug,
             "created_at": self.created_at.isoformat(),
             "storage_path": self.storage_path,
             "project_id": str(self.project_id),

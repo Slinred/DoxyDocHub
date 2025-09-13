@@ -117,6 +117,18 @@ class DoxyDocHubApiVersionsEndpoint:
                     if not project:
                         return {"error": "Project not found"}, 404
 
+                    # ensure this project does not already contain this version
+                    version = (
+                        db.session.query(ProjectVersion)
+                        .filter_by(version=version_str, project_id=project_id)
+                        .first()
+                    )
+                    if version:
+                        return {
+                            "error": f"Version {version_str} already exists for this project! Please update via PUT if you want to modify that version!",
+                            "version": version.to_dict(),
+                        }, 400
+
                     new_version = ProjectVersion(
                         version=version_str,
                         project_id=project_id,
