@@ -39,6 +39,18 @@ header h1 {
     color: white;
 }
 
+.header-title-text {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+.header-title-text:visited,
+.header-title-text:hover,
+.header-title-text:active {
+    color: inherit;
+    text-decoration: none;
+}
+
 /* Icon in header */
 .header-icon {
     font-size: 1.8rem;        /* slightly bigger than text */

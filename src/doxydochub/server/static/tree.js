@@ -1,19 +1,44 @@
 document.addEventListener("DOMContentLoaded", () => {
-    const bookIcons = document.querySelectorAll(".tree-item.has-children > .tree-label .tree-book-icon");
 
+  const titleLink = document.getElementById("header-title-link");
+    if (titleLink) {
+        titleLink.addEventListener("click", function(e) {
+            e.preventDefault();
+            localStorage.clear();
+            window.location.href = "/";
+        });
+    }
+
+    const expanded = getExpandedItems();
+    expanded.forEach(id => {
+        const item = document.querySelector(`.tree-item[data-id='${id}'] .nested`);
+        if (item) {
+          item.classList.add("active");
+          const bookIcon = item.parentElement.querySelector(".tree-book-icon");
+          if (bookIcon) bookIcon.click()
+        }
+    });
+
+    const bookIcons = document.querySelectorAll(".tree-item.has-children > .tree-label .tree-book-icon");
     bookIcons.forEach(bookIcon => {
         bookIcon.addEventListener("click", (event) => {
             event.stopPropagation();
             const parent = bookIcon.closest(".tree-item");
+            const id = parent.getAttribute("data-id");
+            let expanded = getExpandedItems();
+
             const nested = parent.querySelector(".nested");
             nested.classList.toggle("active");
 
             // Switch book icon
             if (nested.classList.contains("active")) {
+                if (!expanded.includes(id)) expanded.push(id);
                 bookIcon.innerHTML = `<span class="iconify" data-icon="mdi:book-minus-multiple"></span>`;
             } else {
+                expanded = expanded.filter(x => x !== id);
                 bookIcon.innerHTML = `<span class="iconify" data-icon="mdi:book-plus-multiple"></span>`;
             }
+            setExpandedItems(expanded);
         });
     });
 
@@ -22,23 +47,33 @@ document.addEventListener("DOMContentLoaded", () => {
         label.addEventListener("click", async (event) => {
             // Stop event from bubbling to parent labels
             event.stopPropagation();
-
-            const item = label.closest(".tree-item");
-            const projectId = item.getAttribute("data-id");
-            if (!projectId) return;
-
-            const response = await fetch(`/api/projects/${projectId}`);
-            if (!response.ok) {
-                console.error("Failed to fetch project", response.statusText);
-                return;
-            }
-
-            const project = await response.json();
-            renderProjectDetails(project);
+            fetchAndRenderProjectDetails(label);
         });
     });
 
+    const selectedId = getSelectedProject();
+    if (selectedId) {
+        const label = document.querySelector(`.tree-item[data-id='${selectedId}'] .tree-label`);
+        if (label) fetchAndRenderProjectDetails(label);
+    }
 });
+
+async function fetchAndRenderProjectDetails(label) {
+  const item = label.closest(".tree-item");
+  const projectId = item.getAttribute("data-id");
+  if (!projectId) return;
+
+  setSelectedProject(projectId);
+
+  const response = await fetch(`/api/projects/${projectId}`);
+  if (!response.ok) {
+      console.error("Failed to fetch project", response.statusText);
+      return;
+  }
+
+  const project = await response.json();
+  renderProjectDetails(project);
+}
 
 function renderProjectDetails(project) {
     const content = document.getElementById("project-content");
@@ -226,4 +261,18 @@ function showVersionInContent(project, version) {
     }
   });
 
+}
+
+// Helper to get/set expanded items
+function getExpandedItems() {
+    return JSON.parse(localStorage.getItem("expandedTreeItems") || "[]");
+}
+function setExpandedItems(ids) {
+    localStorage.setItem("expandedTreeItems", JSON.stringify(ids));
+}
+function setSelectedProject(id) {
+    localStorage.setItem("selectedProjectId", id);
+}
+function getSelectedProject() {
+    return localStorage.getItem("selectedProjectId");
 }
