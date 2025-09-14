@@ -75,12 +75,33 @@ class DoxyDocHubApiVersionsEndpoint:
                 ),
             },
         )
-        upload_parser = flask_restx.reqparse.RequestParser()
-        upload_parser.add_argument(
-            "file",
-            location="files",
+
+        create_version_parser = flask_restx.reqparse.RequestParser()
+        create_version_parser.add_argument(
+            "version", type=str, location="form", required=True
+        )
+        create_version_parser.add_argument(
+            "project_id", type=str, location="form", required=True
+        )
+        create_version_parser.add_argument(
+            "docs_archive",
             type=werkzeug.datastructures.FileStorage,
+            location="files",
             required=True,
+        )
+
+        update_version_parser = flask_restx.reqparse.RequestParser()
+        update_version_parser.add_argument(
+            "version", type=str, location="form", required=False
+        )
+        update_version_parser.add_argument(
+            "project_id", type=str, location="form", required=False
+        )
+        update_version_parser.add_argument(
+            "docs_archive",
+            type=werkzeug.datastructures.FileStorage,
+            location="files",
+            required=False,
         )
 
         @ns.route("/")
@@ -103,15 +124,18 @@ class DoxyDocHubApiVersionsEndpoint:
             @ns.response(400, "Invalid input")
             @ns.response(404, "Project not found")
             @ns.response(500, "Internal server error")
-            @ns.expect(new_version_model, validate=True)
+            @ns.expect(create_version_parser, validate=True)
             def post(
                 inner_self,
             ) -> dict[str, typing.Any] | tuple[dict[str, typing.Any], int]:
                 """Creates a new version for a project"""
                 try:
-                    data: dict[str, typing.Optional[typing.Any]] = flask.request.json
-                    project_id = data.get("project_id")
-                    version_str = data.get("version")
+                    args = create_version_parser.parse_args()
+                    project_id: str = args.get("project_id")
+                    version_str: str = args.get("version")
+                    docs_archive: werkzeug.datastructures.FileStorage = args.get(
+                        "docs_archive"
+                    )
 
                     project = db.session.query(Project).filter_by(id=project_id).first()
                     if not project:
@@ -125,7 +149,7 @@ class DoxyDocHubApiVersionsEndpoint:
                     )
                     if version:
                         return {
-                            "error": f"Version {version_str} already exists for this project! Please update via PUT if you want to modify that version!",
+                            "error": f"Version {version_str} already exists for this project! Please update via version specifc PUT if you want to modify that version!",
                             "version": version.to_dict(),
                         }, 400
 
@@ -135,13 +159,23 @@ class DoxyDocHubApiVersionsEndpoint:
                     )
                     db.session.add(new_version)
                     db.session.flush()  # To get the new_version.id
-                    storage_path: str = server_config.data.data_dir
-                    storage_path = os.path.abspath(
-                        os.path.join(storage_path, str(project.id), str(new_version.id))
+                    new_version.storage_path = os.path.abspath(
+                        os.path.join(
+                            server_config.data.data_dir,
+                            str(project.id),
+                            str(new_version.id),
+                        )
                     )
-                    os.makedirs(storage_path, exist_ok=True)
-                    new_version.storage_path = storage_path
                     db.session.commit()
+
+                    error, result = self._process_doc_archive(
+                        new_version, docs_archive, False
+                    )
+                    if result != 201:
+                        db.session.delete(new_version)
+                        db.session.commit()
+                        return error, result
+
                     return new_version.to_dict(), 201
                 except sqla_exc.SQLAlchemyError as e:
                     logging.error(f"Database error: {e}")
@@ -167,6 +201,57 @@ class DoxyDocHubApiVersionsEndpoint:
                     )
                     if not version:
                         return {"error": "Version not found"}, 404
+                    return version.to_dict(), 200
+                except sqla_exc.SQLAlchemyError as e:
+                    logging.error(f"Database error: {e}")
+                    return {"error": "Database error"}, 500
+
+            @ns.doc("update_version")
+            @ns.response(200, "Version updated", existing_version_model)
+            @ns.response(400, "Invalid input")
+            @ns.response(404, "Version not found")
+            @ns.response(500, "Internal server error")
+            @ns.expect(update_version_parser, validate=True)
+            def put(
+                inner_self, version_id: str
+            ) -> dict[str, typing.Any] | tuple[dict[str, typing.Any], int]:
+                """Updates a version object by ID"""
+                try:
+                    args = update_version_parser.parse_args()
+                    version_str: typing.Optional[str] = args.get("version")
+                    project_id: typing.Optional[str] = args.get("project_id")
+                    docs_archive: typing.Optional[
+                        werkzeug.datastructures.FileStorage
+                    ] = args.get("docs_archive")
+
+                    version = (
+                        db.session.query(ProjectVersion)
+                        .filter_by(id=version_id)
+                        .first()
+                    )
+                    if not version:
+                        return {"error": "Version not found"}, 404
+
+                    if project_id:
+                        project = (
+                            db.session.query(Project).filter_by(id=project_id).first()
+                        )
+                        if not project:
+                            return {"error": "Project not found"}, 404
+                        version.project_id = project_id
+
+                    if version_str:
+                        version.version = version_str
+
+                    if docs_archive:
+                        error, result = self._process_doc_archive(
+                            version, docs_archive, True
+                        )
+                        if result != 201:
+                            db.session.rollback()
+                            return error, result
+
+                    db.session.commit()
                     return version.to_dict(), 200
                 except sqla_exc.SQLAlchemyError as e:
                     logging.error(f"Database error: {e}")
@@ -230,62 +315,48 @@ class DoxyDocHubApiVersionsEndpoint:
                     logging.error(f"Database error: {e}")
                     return {"error": "Database error"}, 500
 
-            @ns.doc("upload_version_data")
-            @ns.response(201, "Version data uploaded")
-            @ns.response(400, "Invalid input")
-            @ns.response(403, "Data already exists for this version")
-            @ns.response(404, "Version not found")
-            @ns.response(500, "Internal server error")
-            @ns.expect(upload_parser, validate=True)
-            def post(
-                inner_self, version_id: str
-            ) -> dict[str, typing.Any] | tuple[dict[str, typing.Any], int]:
-                """Uploads doxygen-generated HTML documentation as .zip archive for the specified version"""
-                try:
-                    args = upload_parser.parse_args()
-                    file = args.get("file")
-
-                    if not file or not isinstance(
-                        file, werkzeug.datastructures.FileStorage
-                    ):
-                        return {"error": "No file provided"}, 400
-                    if not file.filename.endswith(".zip"):
-                        return {"error": "Uploaded file must be a .zip archive"}, 400
-
-                    version = (
-                        db.session.query(ProjectVersion)
-                        .filter_by(id=version_id)
-                        .first()
-                    )
-                    if not version:
-                        return {"error": "Version not found"}, 404
-
-                    storage_path: str = version.storage_path
-                    if not storage_path:
-                        return {"error": "Invalid storage path"}, 400
-                    if os.path.exists(storage_path) and os.listdir(storage_path):
-                        return {"error": "Data already exists for this version"}, 403
-
-                    os.makedirs(storage_path, exist_ok=True)
-
-                    file_path = os.path.join(tempfile.gettempdir(), "upload.zip")
-                    file.save(file_path)
-
-                    with zipfile.ZipFile(file_path, "r") as zipf:
-                        zipf.extractall(storage_path)
-                    os.remove(file_path)
-
-                    if not any(
-                        f.lower() == "index.html" for f in os.listdir(storage_path)
-                    ):
-                        shutil.rmtree(storage_path)
-                        return {
-                            "error": "Uploaded data must contain an index.html file"
-                        }, 400
-
-                    return {"message": "Version data uploaded successfully"}, 201
-                except sqla_exc.SQLAlchemyError as e:
-                    logging.error(f"Database error: {e}")
-                    return {"error": "Database error"}, 500
-
         api.add_namespace(ns, path=f"/{self.ENDPOINT}")
+
+    def _process_doc_archive(
+        self,
+        version: ProjectVersion,
+        docs_archive: werkzeug.datastructures.FileStorage,
+        overwrite: bool = False,
+    ) -> tuple[dict[str, str], int]:
+        if not docs_archive or not isinstance(
+            docs_archive, werkzeug.datastructures.FileStorage
+        ):
+            return {"error": "No file provided"}, 400
+        if not docs_archive.filename.endswith(".zip"):
+            return {"error": "Uploaded file must be a .zip archive"}, 400
+
+        if not version:
+            return {"error": "Version not found"}, 404
+
+        storage_path: str = version.storage_path
+        if not storage_path:
+            return {"error": "Invalid storage path"}, 400
+
+        if not overwrite and os.path.exists(storage_path) and os.listdir(storage_path):
+            return {"error": "Data already exists for this version"}, 403
+
+        temp_extract_path = os.path.join(tempfile.gettempdir(), "content")
+        shutil.rmtree(temp_extract_path, ignore_errors=True)
+        os.makedirs(temp_extract_path, exist_ok=True)
+
+        file_path = os.path.join(tempfile.gettempdir(), "upload.zip")
+        docs_archive.save(file_path)
+
+        with zipfile.ZipFile(file_path, "r") as zipf:
+            zipf.extractall(temp_extract_path)
+        os.remove(file_path)
+
+        if not any(f.lower() == "index.html" for f in os.listdir(temp_extract_path)):
+            shutil.rmtree(temp_extract_path)
+            return {"error": "Uploaded data must contain an index.html file"}, 400
+
+        shutil.rmtree(storage_path, ignore_errors=True)
+        shutil.copytree(temp_extract_path, storage_path)
+        shutil.rmtree(temp_extract_path)
+
+        return {"message": "Version data uploaded successfully"}, 201

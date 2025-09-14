@@ -191,3 +191,17 @@ def update_latest_version(mapper, connection, target):
         .where(Project.id == target.project_id)
         .values(latest_version_id=target.id)
     )
+
+
+@event.listens_for(Project.name, "set", retval=False)
+def on_name_set(target, value, oldvalue, initiator):
+    # This runs whenever ProjectVersion.version is assigned
+    target.name_slug = slugify.slugify(value, lowercase=False)
+    return value
+
+
+@event.listens_for(ProjectVersion.version, "set", retval=False)
+def on_version_set(target, value, oldvalue, initiator):
+    # This runs whenever ProjectVersion.version is assigned
+    target.version_slug = slugify.slugify(value, lowercase=False)
+    return value
