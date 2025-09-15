@@ -8,7 +8,9 @@ from unittest.mock import MagicMock, patch
 import flask
 from flask_restx import Api
 
-from doxydochub.api.endpoints.versions_apiendpoint import DoxyDocHubApiVersionsEndpoint
+from doxydochub.api.endpoints.docversions_apiendpoint import (
+    DoxyDocHubApiVersionsEndpoint,
+)
 from doxydochub.database.database import DoxyDocHubDatabase
 from doxydochub.database.database_schema import Project, ProjectVersion
 from doxydochub.server.server_config import DoxyDocHubConfig

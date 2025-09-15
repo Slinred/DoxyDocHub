@@ -7,12 +7,16 @@ import flask
 import sqlalchemy.exc as sqla_exc
 
 from ...database.database import DoxyDocHubDatabase
-from ...database.database_schema import Project, ProjectVersion, ProjectMetadata
+from ...database.database_schema import (
+    DocumentedProject,
+    DocumentedVersion,
+    MetadataDbObject,
+)
 
 
 class DoxyDocHubApiProjectsEndpoint:
 
-    ENDPOINT = "projects"
+    ENDPOINT = "doc_projects"
 
     def __init__(
         self,
@@ -31,14 +35,14 @@ class DoxyDocHubApiProjectsEndpoint:
         self.logger = logging.getLogger(self.__class__.__name__)
 
         ns: flask_restx.Namespace = api.namespace(
-            self.ENDPOINT, description="Project operations"
+            self.ENDPOINT, description="DocumentedProject operations"
         )
 
         new_project_model = ns.model(
             "NewProject",
             {
                 "name": flask_restx.fields.String(
-                    required=True, description="Project name"
+                    required=True, description="DocumentedProject name"
                 ),
                 "origin_url": flask_restx.fields.String(
                     required=True,
@@ -57,7 +61,7 @@ class DoxyDocHubApiProjectsEndpoint:
             "ExistingProject",
             {
                 "name": flask_restx.fields.String(
-                    required=False, description="Project name", default=None
+                    required=False, description="DocumentedProject name", default=None
                 ),
                 "origin_url": flask_restx.fields.String(
                     required=False,
@@ -89,12 +93,12 @@ class DoxyDocHubApiProjectsEndpoint:
             @ns.doc("list_projects")
             def get(inner_self) -> list[dict[str, typing.Any]]:
                 """List all projects with metadata"""
-                projects = self.db.session.query(Project).all()
-                return [p.to_dict() for p in projects]
+                projects = self.db.session.query(DocumentedProject).all()
+                return [p.to_dict(self.db.session) for p in projects]
 
             @ns.doc("create_project")
-            @ns.response(201, "Project created successfully")
-            @ns.response(409, "Project with this name already exists")
+            @ns.response(201, "DocumentedProject created successfully")
+            @ns.response(409, "DocumentedProject with this name already exists")
             @ns.response(400, "Invalid input")
             @ns.response(500, "Internal server error")
             @ns.expect(new_project_model, validate=True)
@@ -108,9 +112,11 @@ class DoxyDocHubApiProjectsEndpoint:
                 metadata = data.get("metadata", {})
 
                 # Check if project with the same name already exists
-                existing = db.session.query(Project).filter_by(name=name).first()
+                existing = (
+                    db.session.query(DocumentedProject).filter_by(name=name).first()
+                )
                 if existing:
-                    ErrorMsg = f"Project with name '{name}' already exists. Specify a different name!"
+                    ErrorMsg = f"DocumentedProject with name '{name}' already exists. Specify a different name!"
                     self.logger.warning(ErrorMsg)
                     return (
                         {
@@ -122,22 +128,19 @@ class DoxyDocHubApiProjectsEndpoint:
 
                 try:
                     # Create project
-                    project = Project(
+                    project = DocumentedProject(
                         name=name, origin_url=origin_url, parent_id=parent_id
                     )
                     db.session.add(project)
                     db.session.flush()  # flush to get project.id
 
                     # Add optional metadata
-                    for key, value in metadata.items():
-                        db.session.add(
-                            ProjectMetadata(project_id=project.id, key=key, value=value)
-                        )
+                    project.update_metadata(metadata, self.db.session)
 
                     db.session.commit()
                     self.logger.info(f"Created project {project.name} ({project.id})")
                     return (
-                        project.to_dict(),
+                        project.to_dict(self.db.session),
                         201,
                     )
 
@@ -158,16 +161,14 @@ class DoxyDocHubApiProjectsEndpoint:
             ) -> list[dict[str, typing.Any]] | tuple[dict[str, typing.Any], int]:
                 """Get the project tree structure"""
                 try:
-                    projects = self.db.session.query(Project).all()
+                    projects = self.db.session.query(DocumentedProject).all()
 
-                    def build_tree(proj: Project) -> dict[str, typing.Any]:
+                    def build_tree(proj: DocumentedProject) -> dict[str, typing.Any]:
                         return {
                             "id": str(proj.id),
                             "name": proj.name,
                             "origin_url": proj.origin_url,
-                            "metadata": {
-                                item.key: item.value for item in proj.metadata_items
-                            },
+                            "metadata": proj.get_metadata(self.db.session),
                             "children": [build_tree(child) for child in proj.children],
                         }
 
@@ -185,7 +186,7 @@ class DoxyDocHubApiProjectsEndpoint:
 
             @ns.doc("get_project_details")
             @ns.response(200, "Success")
-            @ns.response(404, "Project not found")
+            @ns.response(404, "DocumentedProject not found")
             @ns.response(500, "Internal server error")
             def get(
                 innerself, project_id
@@ -193,17 +194,17 @@ class DoxyDocHubApiProjectsEndpoint:
                 """Get details of a specific project by ID"""
 
                 try:
-                    project = db.session.get(Project, project_id)
+                    project = db.session.get(DocumentedProject, project_id)
                     if not project:
-                        return {"error": "Project not found"}, 404
+                        return {"error": "DocumentedProject not found"}, 404
 
-                    return project.to_dict()
+                    return project.to_dict(self.db.session)
                 except sqla_exc.SQLAlchemyError as e:
                     self.logger.exception("Failed to fetch project details")
                     return {"error": "Database error", "details": str(e)}, 500
 
             @ns.doc("update_project")
-            @ns.response(200, "Project updated successfully")
+            @ns.response(200, "DocumentedProject updated successfully")
             @ns.response(201, "New project created successfully")
             @ns.response(400, "Invalid input")
             @ns.response(500, "Internal server error")
@@ -221,13 +222,17 @@ class DoxyDocHubApiProjectsEndpoint:
 
                 try:
                     result = 200
-                    project = db.session.query(Project).filter_by(id=project_id).first()
+                    project = (
+                        db.session.query(DocumentedProject)
+                        .filter_by(id=project_id)
+                        .first()
+                    )
                     if not project:
                         self.logger.info(
-                            f"Project with ID {project_id} not found, creating new one"
+                            f"DocumentedProject with ID {project_id} not found, creating new one"
                         )
                         # Create new project
-                        project = Project(
+                        project = DocumentedProject(
                             id=project_id,
                             name=name,
                             origin_url=origin_url,
@@ -252,11 +257,11 @@ class DoxyDocHubApiProjectsEndpoint:
                         )
                         result = 200
 
-                    project.update_metadata(metadata)
+                    project.update_metadata(metadata, self.db.session)
                     db.session.commit()
                     self.logger.info(f"Updated project {project.name} ({project.id})")
                     return (
-                        project.to_dict(),
+                        project.to_dict(self.db.session),
                         result,
                     )
                 except sqla_exc.SQLAlchemyError as e:
@@ -265,33 +270,39 @@ class DoxyDocHubApiProjectsEndpoint:
                     return {"error": "Database error", "details": str(e)}, 500
 
             @ns.doc("delete_project")
-            @ns.response(200, "Project deleted successfully")
+            @ns.response(200, "DocumentedProject deleted successfully")
             @ns.response(400, "Invalid input")
-            @ns.response(404, "Project not found")
+            @ns.response(404, "DocumentedProject not found")
             @ns.response(500, "Internal server error")
             def delete(inner_self, project_id) -> tuple[dict[str, typing.Any], int]:
                 """Deletes an existing project"""
 
                 try:
-                    project = db.session.query(Project).filter_by(id=project_id).first()
+                    project = (
+                        db.session.query(DocumentedProject)
+                        .filter_by(id=project_id)
+                        .first()
+                    )
                     if not project:
                         self.logger.info(
-                            f"Project with ID {project_id} not found! Cannot delete."
+                            f"DocumentedProject with ID {project_id} not found! Cannot delete."
                         )
-                        return {"error": "Project not found"}, 404
+                        return {"error": "DocumentedProject not found"}, 404
                     project_name = project.name
                     # First set parent to null for projects that have this project as parent
-                    children = db.session.query(Project).filter_by(parent_id=project_id)
+                    children = db.session.query(DocumentedProject).filter_by(
+                        parent_id=project_id
+                    )
                     for child in children:
                         child.parent_id = None
                     db.session.flush()
                     # Delete the project
                     db.session.delete(project)
                     # Also delete all associated versions and metadata
-                    db.session.query(ProjectVersion).filter_by(
+                    db.session.query(DocumentedVersion).filter_by(
                         project_id=project_id
                     ).delete()
-                    db.session.query(ProjectMetadata).filter_by(
+                    db.session.query(MetadataDbObject).filter_by(
                         project_id=project_id
                     ).delete()
                     db.session.commit()

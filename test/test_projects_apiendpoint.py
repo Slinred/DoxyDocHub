@@ -9,7 +9,9 @@ import sqlalchemy.exc as sqla_exc
 from doxydochub.database.database import DoxyDocHubDatabase
 from doxydochub.database.database_schema import Project
 from doxydochub.server.server_config import DoxyDocHubConfig
-from doxydochub.api.endpoints.projects_apiendpoint import DoxyDocHubApiProjectsEndpoint
+from doxydochub.api.endpoints.docprojects_apiendpoint import (
+    DoxyDocHubApiProjectsEndpoint,
+)
 
 TEST_DB_FILENAME = "test_doxydochub.db"
 TEST_DB_URL = f"sqlite:///{TEST_DB_FILENAME}"

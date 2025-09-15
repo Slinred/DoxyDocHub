@@ -8,7 +8,7 @@ from .server_config import DoxyDocHubConfig
 from ..api.doxydochubapi import DoxyDocHubApi
 
 from ..database.database import DoxyDocHubDatabase
-from ..database.database_schema import Project, ProjectVersion
+from ..database.database_schema import DocumentedProject, DocumentedVersion
 
 
 class DoxyDocHubServer:
@@ -39,8 +39,8 @@ class DoxyDocHubServer:
         def index():  # type: ignore
             return render_template(
                 "index.html",
-                projects=self._db.session.query(Project)
-                .filter(Project.parent_id == None)
+                projects=self._db.session.query(DocumentedProject)
+                .filter(DocumentedProject.parent_id == None)
                 .all(),
                 version=self._version,
             )
@@ -70,16 +70,16 @@ class DoxyDocHubServer:
         )
         def serve_docs(project_slug, version_slug, filename):
             project = (
-                self._db.session.query(Project)
+                self._db.session.query(DocumentedProject)
                 .filter_by(name_slug=project_slug)
                 .first()
             )
             if not project:
-                abort(404, description="Project not found")
+                abort(404, description="DocumentedProject not found")
 
-            # Look up the ProjectVersion in the DB
+            # Look up the DocumentedVersion in the DB
             version = (
-                self._db.session.query(ProjectVersion)
+                self._db.session.query(DocumentedVersion)
                 .filter_by(version_slug=version_slug, project_id=project.id)
                 .first()
             )

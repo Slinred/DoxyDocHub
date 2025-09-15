@@ -14,7 +14,7 @@ from sqlalchemy import (
     event,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import relationship, declarative_base, Session, remote
 import slugify
 
 DataBaseSchema = declarative_base()
@@ -53,89 +53,150 @@ class GUID(TypeDecorator[str]):
         return str(uuid.UUID(value))
 
 
-class Project(DataBaseSchema):
-    __tablename__ = "projects"
+class BaseDbObject:
+    __abstract__ = True
 
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)  # type: ignore
-    name = Column(String(255), nullable=False, unique=True)
-    name_slug = Column(String(255), nullable=False, unique=True)
+
+    def to_dict(self, *args, **kwargs) -> dict[str, typing.Any]:
+        return {"id": self.id}
+
+
+class MetadataDbObject(BaseDbObject, DataBaseSchema):
+    __tablename__ = "objects_metadata"
+
+    parent_id = Column(GUID(), nullable=False)  # type: ignore
+    parent_type = Column(String(50), nullable=False)
+
+    key = Column(String(255), nullable=False)
+    value = Column(Text, nullable=False)
+
+    def get_parent(self, session: Session):  # type: ignore
+        if self.parent_type == "DocumentedProject":
+            return session.query(DocumentedProject).get(self.parent_id)
+        elif self.parent_type == "DocumentedVersion":
+            return session.query(DocumentedVersion).get(self.parent_id)
+        return None
+
+    def to_dict(self) -> dict[str, typing.Any]:
+        return {
+            **super().to_dict(),
+            **{
+                "parent_id": str(self.parent_id),
+                "parent_type": str(self.parent_type),
+                "key": self.key,
+                "value": self.value,
+            },
+        }
+
+
+class MetadataAwareBaseDbObject(BaseDbObject):
+    __abstract__ = True
+
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    origin_url = Column(Text, nullable=False)
-    latest_version_id = Column(
-        GUID(),
-        ForeignKey("project_versions.id", deferrable=True, initially="DEFERRED"),
-        nullable=True,
-    )
 
-    parent_id = Column(GUID(), ForeignKey("projects.id"), nullable=True)  # type: ignore
+    def get_metadata(self, session: Session):
+        return (
+            session.query(MetadataDbObject)
+            .filter_by(parent_id=self.id, parent_type=self.__class__.__name__)
+            .all()
+        )
 
-    parent = relationship("Project", remote_side=[id], back_populates="children")
-    children = relationship("Project", back_populates="parent", cascade="all, delete")
-
-    versions = relationship(
-        "ProjectVersion",
-        back_populates="project",
-        cascade="all, delete-orphan",
-        foreign_keys="[ProjectVersion.project_id]",
-    )
-
-    latest_version = relationship(
-        "ProjectVersion", foreign_keys=[latest_version_id], post_update=True
-    )
-
-    metadata_items = relationship(
-        "ProjectMetadata", back_populates="project", cascade="all, delete-orphan"
-    )
-
-    def __init__(self, name, **kwargs):
-        super().__init__(**kwargs)
-        self.name = name
-        self.name_slug = slugify.slugify(self.name, lowercase=False)
-
-    def update_metadata(self, new_metadata: dict[str, str]) -> None:
-        existing_keys = {item.key: item for item in self.metadata_items}
+    def update_metadata(self, new_metadata: dict[str, str], session: Session) -> None:
+        actual_metadata_items = self.get_metadata(session)
+        existing_keys = {item.key: item for item in actual_metadata_items}
         for key, value in new_metadata.items():
             if key in existing_keys:
                 existing_keys[key].value = value
             else:
-                self.metadata_items.append(
-                    ProjectMetadata(project_id=self.id, key=key, value=value)
+                new_metadata_item = MetadataDbObject(
+                    parent_id=self.id,
+                    parent_type=self.__class__.__name__,
+                    key=key,
+                    value=value,
                 )
+                session.add(new_metadata_item)
 
         # Remove metadata items not in new_metadata
         for key in list(existing_keys.keys()):
             if key not in new_metadata:
-                self.metadata_items.remove(existing_keys[key])
+                session.delete(existing_keys[key])
 
-    def to_dict(self) -> dict[str, typing.Any]:
+        session.commit()
+
+    def to_dict(self, session: Session) -> dict[str, typing.Any]:
         return {
-            "id": str(self.id),
-            "name": self.name,
-            "name_slug": self.name_slug,
+            **super().to_dict(),
             "created_at": self.created_at.isoformat(),
-            "origin_url": self.origin_url,
-            "latest_version": (
-                self.latest_version.version if self.latest_version else None
-            ),
-            "parent": self.parent.id if self.parent else None,
-            "children": [child.id for child in self.children],
-            "versions": [v.to_dict() for v in self.versions],
-            "metadata": {item.key: item.value for item in self.metadata_items},
+            "metadata": {item.key: item.value for item in self.get_metadata(session)},
         }
 
 
-class ProjectVersion(DataBaseSchema):
-    __tablename__ = "project_versions"
+class DocumentedProject(MetadataAwareBaseDbObject, DataBaseSchema):
+    __tablename__ = "doc_projects"
+
+    # id = MetadataAwareBaseDbObject.id
+    name = Column(String(255), nullable=False, unique=True)
+    name_slug = Column(String(255), nullable=False, unique=True)
+    origin_url = Column(Text, nullable=False)
+    latest_version_id = Column(
+        GUID(),
+        ForeignKey("doc_versions.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
+    )
+
+    parent_id = Column(GUID(), ForeignKey(f"{__tablename__}.id"), nullable=True)  # type: ignore
+
+    versions = relationship(
+        "DocumentedVersion",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        foreign_keys="[DocumentedVersion.project_id]",
+    )
+
+    latest_version = relationship(
+        "DocumentedVersion", foreign_keys=[latest_version_id], post_update=True
+    )
+
+    def to_dict(self, session: Session) -> dict[str, typing.Any]:
+        return {
+            **MetadataAwareBaseDbObject.to_dict(self, session),
+            **{
+                "name": self.name,
+                "name_slug": self.name_slug,
+                "origin_url": self.origin_url,
+                "latest_version": (
+                    self.latest_version.version if self.latest_version else None
+                ),
+                "parent": self.parent.id if self.parent else None,
+                "children": [child.id for child in self.children],
+                "versions": [v.to_dict(session) for v in self.versions],
+            },
+        }
+
+
+DocumentedProject.parent = relationship(
+    "DocumentedProject",
+    primaryjoin="DocumentedProject.parent_id==DocumentedProject.id",
+    remote_side=[remote(DocumentedProject.id)],
+    back_populates="children",
+)
+DocumentedProject.children = relationship(
+    "DocumentedProject", back_populates="parent", cascade="all, delete"
+)
+
+
+class DocumentedVersion(MetadataAwareBaseDbObject, DataBaseSchema):
+    __tablename__ = "doc_versions"
 
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)  # type: ignore
     version = Column(String(255), nullable=False, unique=False)
     version_slug = Column(String(255), nullable=False, unique=False)
-    project_id = Column(GUID(), ForeignKey("projects.id"), nullable=False)  # type: ignore
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    project_id = Column(GUID(), ForeignKey("doc_projects.id"), nullable=False)  # type: ignore
     storage_path = Column(Text, nullable=True)
 
     project = relationship(
-        "Project", back_populates="versions", foreign_keys=[project_id]
+        "DocumentedProject", back_populates="versions", foreign_keys=[project_id]
     )
 
     def __init__(self, version, **kwargs):
@@ -149,59 +210,40 @@ class ProjectVersion(DataBaseSchema):
             return os.path.exists(index_path)
         return False
 
-    def to_dict(self) -> dict[str, typing.Any]:
-
+    def to_dict(self, session: Session) -> dict[str, typing.Any]:
         return {
-            "id": str(self.id),
-            "version": self.version,
-            "version_slug": self.version_slug,
-            "created_at": self.created_at.isoformat(),
-            "storage_path": self.storage_path,
-            "project_id": str(self.project_id),
-            "has_docs": self.has_docs(),
+            **MetadataAwareBaseDbObject.to_dict(self, session),
+            **{
+                "version": self.version,
+                "version_slug": self.version_slug,
+                "storage_path": self.storage_path,
+                "project_id": str(self.project_id),
+                "has_docs": self.has_docs(),
+            },
         }
 
 
-class ProjectMetadata(DataBaseSchema):
-    __tablename__ = "project_metadata"
-
-    id = Column(GUID(), primary_key=True, default=uuid.uuid4)  # type: ignore
-    project_id = Column(GUID(), ForeignKey("projects.id"), nullable=False)  # type: ignore
-    key = Column(String(255), nullable=False)
-    value = Column(Text, nullable=False)
-
-    project = relationship("Project", back_populates="metadata_items")
-
-    def to_dict(self) -> dict[str, typing.Any]:
-        return {
-            "id": str(self.id),
-            "project_id": str(self.project_id),
-            "key": self.key,
-            "value": self.value,
-        }
-
-
-# after insert on ProjectVersion, update the project's latest_version_id
-@event.listens_for(ProjectVersion, "after_insert")
-def update_latest_version(mapper, connection, target):
-    # target = newly inserted ProjectVersion
-    # update the Project.latest_version_id
-    connection.execute(
-        Project.__table__.update()
-        .where(Project.id == target.project_id)
-        .values(latest_version_id=target.id)
-    )
-
-
-@event.listens_for(Project.name, "set", retval=False)
+@event.listens_for(DocumentedProject.name, "set", retval=False)
 def on_name_set(target, value, oldvalue, initiator):
-    # This runs whenever ProjectVersion.version is assigned
+    # This runs whenever DocumentedVersion.version is assigned
     target.name_slug = slugify.slugify(value, lowercase=False)
     return value
 
 
-@event.listens_for(ProjectVersion.version, "set", retval=False)
+# after insert on DocumentedVersion, update the project's latest_version_id
+@event.listens_for(DocumentedVersion, "after_insert")
+def update_latest_version(mapper, connection, target):
+    # target = newly inserted DocumentedVersion
+    # update the DocumentedProject.latest_version_id
+    connection.execute(
+        DocumentedProject.__table__.update()
+        .where(DocumentedProject.id == target.project_id)
+        .values(latest_version_id=target.id)
+    )
+
+
+@event.listens_for(DocumentedVersion.version, "set", retval=False)
 def on_version_set(target, value, oldvalue, initiator):
-    # This runs whenever ProjectVersion.version is assigned
+    # This runs whenever DocumentedVersion.version is assigned
     target.version_slug = slugify.slugify(value, lowercase=False)
     return value

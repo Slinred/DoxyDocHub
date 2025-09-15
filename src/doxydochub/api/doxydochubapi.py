@@ -35,9 +35,9 @@ class DoxyDocHubApi:
         self._register_endpoints()
 
     def _register_endpoints(self):
-        from .endpoints.projects_apiendpoint import DoxyDocHubApiProjectsEndpoint
+        from .endpoints.docprojects_apiendpoint import DoxyDocHubApiProjectsEndpoint
         from .endpoints.config_apiendpoint import DoxyDocHubApiConfigEndpoint
-        from .endpoints.versions_apiendpoint import DoxyDocHubApiVersionsEndpoint
+        from .endpoints.docversions_apiendpoint import DoxyDocHubApiVersionsEndpoint
 
         DoxyDocHubApiConfigEndpoint(self._api, self._server_config)
         DoxyDocHubApiProjectsEndpoint(self._api, self._db, config=None)

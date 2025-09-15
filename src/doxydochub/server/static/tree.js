@@ -65,7 +65,7 @@ async function fetchAndRenderProjectDetails(label) {
 
   setSelectedProject(projectId);
 
-  const response = await fetch(`/api/projects/${projectId}`);
+  const response = await fetch(`/api/doc_projects/${projectId}`);
   if (!response.ok) {
       console.error("Failed to fetch project", response.statusText);
       return;
@@ -112,7 +112,7 @@ function renderProjectDetails(project) {
     // --- Versions Card ---
     const versionsCard = document.createElement("div");
     versionsCard.className = "card";
-    versionsCard.innerHTML = `<h3>Versions</h3>`;
+    versionsCard.innerHTML = `<h3>Documented Versions</h3>`;
     const versionList = document.createElement("ul");
 
     project.versions.forEach(version => {

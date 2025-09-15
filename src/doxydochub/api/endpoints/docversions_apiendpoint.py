@@ -12,12 +12,16 @@ import sqlalchemy.exc as sqla_exc
 
 from ...server.server_config import DoxyDocHubConfig
 from ...database.database import DoxyDocHubDatabase
-from ...database.database_schema import Project, ProjectVersion, ProjectMetadata
+from ...database.database_schema import (
+    DocumentedProject,
+    DocumentedVersion,
+    MetadataDbObject,
+)
 
 
 class DoxyDocHubApiVersionsEndpoint:
 
-    ENDPOINT = "versions"
+    ENDPOINT = "doc_versions"
 
     def __init__(
         self,
@@ -27,7 +31,7 @@ class DoxyDocHubApiVersionsEndpoint:
         config: typing.Optional[dict[typing.Any, typing.Any]] = None,
     ):
         """
-        Initialize the versions endpoint.
+        Initialize the doc_versions endpoint.
         :param api: Instance of flask_restx.flask_restx.Api
         :param db: Instance of DoxyDocHubDatabase
         :param server_config: Instance of DoxyDocHubConfig
@@ -37,11 +41,12 @@ class DoxyDocHubApiVersionsEndpoint:
         self.logger = logging.getLogger(self.__class__.__name__)
 
         ns: flask_restx.Namespace = api.namespace(
-            self.ENDPOINT, description="Project version related operations"
+            self.ENDPOINT,
+            description="Document access for a DocumentedProject",
         )
 
-        new_version_model = ns.model(
-            "NewVersion",
+        new_docversion_model = ns.model(
+            "NewDocVersion",
             {
                 "project_id": flask_restx.fields.String(
                     required=True,
@@ -50,11 +55,16 @@ class DoxyDocHubApiVersionsEndpoint:
                 "version": flask_restx.fields.String(
                     required=True, description="Version string"
                 ),
+                "metadata": flask_restx.fields.Nested(
+                    ns.model("Metadata", {}),
+                    required=False,
+                    description="Optional metadata for the version (JSON object)",
+                ),
             },
         )
 
-        existing_version_model = ns.model(
-            "ExistingVersion",
+        existing_docversion_model = ns.model(
+            "ExistingDocVersion",
             {
                 "id": flask_restx.fields.String(
                     required=False, description="Unique ID of the version"
@@ -73,77 +83,100 @@ class DoxyDocHubApiVersionsEndpoint:
                     required=False,
                     description="Path where the documentation files are stored on the server",
                 ),
+                "metadata": flask_restx.fields.Nested(
+                    ns.model("Metadata", {}),
+                    required=False,
+                    description="Optional metadata for the version (JSON object)",
+                ),
             },
         )
 
-        create_version_parser = flask_restx.reqparse.RequestParser()
-        create_version_parser.add_argument(
+        create_docversion_parser = flask_restx.reqparse.RequestParser()
+        create_docversion_parser.add_argument(
             "version", type=str, location="form", required=True
         )
-        create_version_parser.add_argument(
+        create_docversion_parser.add_argument(
             "project_id", type=str, location="form", required=True
         )
-        create_version_parser.add_argument(
+        create_docversion_parser.add_argument(
             "docs_archive",
             type=werkzeug.datastructures.FileStorage,
             location="files",
             required=True,
         )
+        create_docversion_parser.add_argument(
+            "metadata",
+            type=str,
+            location="form",
+            required=False,
+            help="Optional metadata for the version (JSON object)",
+        )
 
-        update_version_parser = flask_restx.reqparse.RequestParser()
-        update_version_parser.add_argument(
+        update_docversion_parser = flask_restx.reqparse.RequestParser()
+        update_docversion_parser.add_argument(
             "version", type=str, location="form", required=False
         )
-        update_version_parser.add_argument(
+        update_docversion_parser.add_argument(
             "project_id", type=str, location="form", required=False
         )
-        update_version_parser.add_argument(
+        update_docversion_parser.add_argument(
             "docs_archive",
             type=werkzeug.datastructures.FileStorage,
             location="files",
             required=False,
         )
+        update_docversion_parser.add_argument(
+            "metadata",
+            type=str,
+            location="form",
+            required=False,
+            help="Optional metadata for the version (JSON object). Already existing keys will be updated, new will be added",
+        )
 
         @ns.route("/")
-        class Versions(flask_restx.Resource):  # type: ignore
-            """Handles version objects related to projects"""
+        class DocVersions(flask_restx.Resource):  # type: ignore
+            """Handles DocumentedVersion objects related to DocumentedProjects"""
 
-            @ns.doc("versions_info")
+            @ns.doc("docversions_info")
             @ns.response(200, "Success")
             def get(inner_self) -> dict[str, typing.Any] | tuple[list[typing.Any], int]:
                 """Returns all version objects"""
                 try:
-                    versions = db.session.query(ProjectVersion).all()
-                    return [v.to_dict() for v in versions], 200
+                    doc_versions = db.session.query(DocumentedVersion).all()
+                    return [v.to_dict(db.session) for v in doc_versions], 200
                 except sqla_exc.SQLAlchemyError as e:
                     logging.error(f"Database error: {e}")
                     return {"error": "Database error"}, 500
 
             @ns.doc("create_version")
-            @ns.response(201, "Version created", existing_version_model)
+            @ns.response(201, "DocumentedVersion created", existing_docversion_model)
             @ns.response(400, "Invalid input")
-            @ns.response(404, "Project not found")
+            @ns.response(404, "DocumentedProject not found")
             @ns.response(500, "Internal server error")
-            @ns.expect(create_version_parser, validate=True)
+            @ns.expect(create_docversion_parser, validate=True)
             def post(
                 inner_self,
             ) -> dict[str, typing.Any] | tuple[dict[str, typing.Any], int]:
                 """Creates a new version for a project"""
                 try:
-                    args = create_version_parser.parse_args()
+                    args = create_docversion_parser.parse_args()
                     project_id: str = args.get("project_id")
                     version_str: str = args.get("version")
                     docs_archive: werkzeug.datastructures.FileStorage = args.get(
                         "docs_archive"
                     )
 
-                    project = db.session.query(Project).filter_by(id=project_id).first()
+                    project = (
+                        db.session.query(DocumentedProject)
+                        .filter_by(id=project_id)
+                        .first()
+                    )
                     if not project:
-                        return {"error": "Project not found"}, 404
+                        return {"error": "DocumentedProject not found"}, 404
 
                     # ensure this project does not already contain this version
                     version = (
-                        db.session.query(ProjectVersion)
+                        db.session.query(DocumentedVersion)
                         .filter_by(version=version_str, project_id=project_id)
                         .first()
                     )
@@ -153,7 +186,7 @@ class DoxyDocHubApiVersionsEndpoint:
                             "version": version.to_dict(),
                         }, 400
 
-                    new_version = ProjectVersion(
+                    new_version = DocumentedVersion(
                         version=version_str,
                         project_id=project_id,
                     )
@@ -176,48 +209,48 @@ class DoxyDocHubApiVersionsEndpoint:
                         db.session.commit()
                         return error, result
 
-                    return new_version.to_dict(), 201
+                    return new_version.to_dict(db.session), 201
                 except sqla_exc.SQLAlchemyError as e:
                     logging.error(f"Database error: {e}")
                     return {"error": "Database error"}, 500
 
-        @ns.route("/<string:version_id>")
-        class VersionByID(flask_restx.Resource):  # type: ignore
-            """Handles single version object by ID"""
+        @ns.route("/<string:doc_version_id>")
+        class DocVersionByID(flask_restx.Resource):  # type: ignore
+            """Handles single DocumentedVersion object by ID"""
 
-            @ns.doc("get_version")
-            @ns.response(200, "Success", new_version_model)
-            @ns.response(404, "Version not found")
+            @ns.doc("get_docversion")
+            @ns.response(200, "Success", new_docversion_model)
+            @ns.response(404, "DocumentedVersion not found")
             @ns.response(500, "Internal server error")
             def get(
-                inner_self, version_id: str
+                inner_self, doc_version_id: str
             ) -> dict[str, typing.Any] | tuple[dict[str, typing.Any], int]:
-                """Returns a version object by ID"""
+                """Returns a DocumentedVersion object by ID"""
                 try:
-                    version = (
-                        db.session.query(ProjectVersion)
-                        .filter_by(id=version_id)
+                    doc_version = (
+                        db.session.query(DocumentedVersion)
+                        .filter_by(id=doc_version_id)
                         .first()
                     )
-                    if not version:
-                        return {"error": "Version not found"}, 404
-                    return version.to_dict(), 200
+                    if not doc_version:
+                        return {"error": "DocumentedVersion not found"}, 404
+                    return doc_version.to_dict(), 200
                 except sqla_exc.SQLAlchemyError as e:
                     logging.error(f"Database error: {e}")
                     return {"error": "Database error"}, 500
 
-            @ns.doc("update_version")
-            @ns.response(200, "Version updated", existing_version_model)
+            @ns.doc("update_docversion")
+            @ns.response(200, "DocumentedVersion updated", existing_docversion_model)
             @ns.response(400, "Invalid input")
-            @ns.response(404, "Version not found")
+            @ns.response(404, "DocumentedVersion not found")
             @ns.response(500, "Internal server error")
-            @ns.expect(update_version_parser, validate=True)
+            @ns.expect(update_docversion_parser, validate=True)
             def put(
-                inner_self, version_id: str
+                inner_self, doc_version_id: str
             ) -> dict[str, typing.Any] | tuple[dict[str, typing.Any], int]:
                 """Updates a version object by ID"""
                 try:
-                    args = update_version_parser.parse_args()
+                    args = update_docversion_parser.parse_args()
                     version_str: typing.Optional[str] = args.get("version")
                     project_id: typing.Optional[str] = args.get("project_id")
                     docs_archive: typing.Optional[
@@ -225,8 +258,8 @@ class DoxyDocHubApiVersionsEndpoint:
                     ] = args.get("docs_archive")
 
                     version = (
-                        db.session.query(ProjectVersion)
-                        .filter_by(id=version_id)
+                        db.session.query(DocumentedVersion)
+                        .filter_by(id=doc_version_id)
                         .first()
                     )
                     if not version:
@@ -234,10 +267,12 @@ class DoxyDocHubApiVersionsEndpoint:
 
                     if project_id:
                         project = (
-                            db.session.query(Project).filter_by(id=project_id).first()
+                            db.session.query(DocumentedProject)
+                            .filter_by(id=project_id)
+                            .first()
                         )
                         if not project:
-                            return {"error": "Project not found"}, 404
+                            return {"error": "DocumentedProject not found"}, 404
                         version.project_id = project_id
 
                     if version_str:
@@ -257,7 +292,7 @@ class DoxyDocHubApiVersionsEndpoint:
                     logging.error(f"Database error: {e}")
                     return {"error": "Database error"}, 500
 
-        @ns.route("/<string:version_id>/data")
+        @ns.route("/<string:doc_version_id>/data")
         class VersionData(flask_restx.Resource):  # type: ignore
             """Handles version data retrieval"""
 
@@ -266,25 +301,25 @@ class DoxyDocHubApiVersionsEndpoint:
             @ns.response(404, "No data available")
             @ns.response(500, "Internal server error")
             def get(
-                inner_self, version_id: str
+                inner_self, doc_version_id: str
             ) -> dict[str, typing.Any] | tuple[dict[str, typing.Any], int]:
                 """Returns the doxygen-generated HTML documentation files as a ZIP archive for the specified version"""
                 try:
                     version = (
-                        db.session.query(ProjectVersion)
-                        .filter_by(id=version_id)
+                        db.session.query(DocumentedVersion)
+                        .filter_by(id=doc_version_id)
                         .first()
                     )
                     if not version:
                         return {"error": "Version not found"}, 404
 
                     project = (
-                        db.session.query(Project)
+                        db.session.query(DocumentedProject)
                         .filter_by(id=version.project_id)
                         .first()
                     )
                     if not project:
-                        return {"error": "Project not found"}, 404
+                        return {"error": "DocumentedProject not found"}, 404
 
                     if (
                         not version.storage_path
@@ -319,7 +354,7 @@ class DoxyDocHubApiVersionsEndpoint:
 
     def _process_doc_archive(
         self,
-        version: ProjectVersion,
+        version: DocumentedVersion,
         docs_archive: werkzeug.datastructures.FileStorage,
         overwrite: bool = False,
     ) -> tuple[dict[str, str], int]:
