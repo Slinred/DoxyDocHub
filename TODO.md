@@ -1,0 +1,3 @@
+- [ ] Remove extra endpoint for POSTing version data
+- [ ] Update version POST to handle file upload and docs archive
+- [ ] Add versions/<version_id> PUT endpoint for updating version data and optionally replace docs

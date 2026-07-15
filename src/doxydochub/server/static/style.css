@@ -192,7 +192,7 @@ footer {
     overflow-y: auto;
 }
 
-.card {
+.card, .project-metadata-card, .version-metadata-card {
     width: 100%;           /* full width */
     background-color: #ffffffcc;
     border-left: 4px solid #004d99;
@@ -203,38 +203,50 @@ footer {
 }
 
 /* Card headings */
-.card h3 {
-    margin-top: 0;
-    font-size: 1.2rem;
-    color: #004d99;
+.card-title, .project-metadata-title {
+    margin-top: 0.5rem;
+    margin-bottom: 0.25rem;
+    font-size: 1.3rem;
+    font-weight: bolder;
     display: flex;
     align-items: center;
 }
 
-.card h3 i {
-    margin-right: 8px;
+.version-metadata-title {
+    margin-top: 0;
+    margin-bottom: 0.25rem;
+    font-size: 1.1rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
 }
 
-/* Metadata & Versions list */
-.metadata-list, .versions-list {
-    list-style: none;
-    padding-left: 0;
-    margin: 0.5rem 0 0 0;
+.project-metadata-key, .version-metadata-key {
+  font-size: 1rem;
+  font-weight: bold;
+  padding-left: 0px;
+  margin-bottom: 0.5rem;
+  display: block;
+  text-align: left;
+  word-break: break-word;
 }
 
-.metadata-list li, .versions-list li {
-    padding: 4px 0;
-    border-bottom: 1px solid #eee;
+.project-metadata-value, .version-metadata-value {
+  font-style: italic;
+  font-size: 1rem;
+  padding-left: 20px;
+  text-align: left;
+  word-break: break-word;
 }
 
 /* Versions */
-.versions-list li.latest-version {
-    font-weight: bold;
-    color: #0073e6;
-}
-
-.versions-list li i {
-    margin-right: 6px;
+.version-card-title {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    font-size: 1.2rem;
+    font-weight: bolder;
+    display: flex;
+    align-items: center;
 }
 
 .version-date {
@@ -243,22 +255,15 @@ footer {
     margin-left: 4px;
 }
 
-/* Optional hover effect */
-.versions-list li:hover {
-    background-color: #f0f4ff;
-    border-radius: 4px;
-    padding-left: 2px;
-}
-
-.version-doc-link {
+.doc-version-link {
     color: #555; /* optional: make it a bit more subtle */
     text-decoration: none;
     font-size: 1.25rem; /* relative to root <html> font-size */
-    vertical-align: middle;
-    margin-left: 5px;
+    vertical-align: left;
+    margin-left: 1rem;
 }
 
-.version-doc-link:hover {
+.doc-version-link:hover {
     color: #000; /* highlight on hover */
 }
 

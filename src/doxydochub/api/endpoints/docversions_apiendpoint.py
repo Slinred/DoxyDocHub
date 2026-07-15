@@ -1,3 +1,4 @@
+import json
 import logging
 import shutil
 import typing
@@ -162,6 +163,7 @@ class DoxyDocHubApiVersionsEndpoint:
                     args = create_docversion_parser.parse_args()
                     project_id: str = args.get("project_id")
                     version_str: str = args.get("version")
+                    metadata = json.loads(args.get("metadata"))
                     docs_archive: werkzeug.datastructures.FileStorage = args.get(
                         "docs_archive"
                     )
@@ -183,7 +185,7 @@ class DoxyDocHubApiVersionsEndpoint:
                     if version:
                         return {
                             "error": f"Version {version_str} already exists for this project! Please update via version specifc PUT if you want to modify that version!",
-                            "version": version.to_dict(),
+                            "version": version.to_dict(db.session),
                         }, 400
 
                     new_version = DocumentedVersion(
@@ -200,6 +202,8 @@ class DoxyDocHubApiVersionsEndpoint:
                         )
                     )
                     db.session.commit()
+
+                    new_version.update_metadata(metadata, db.session)
 
                     error, result = self._process_doc_archive(
                         new_version, docs_archive, False
@@ -234,7 +238,7 @@ class DoxyDocHubApiVersionsEndpoint:
                     )
                     if not doc_version:
                         return {"error": "DocumentedVersion not found"}, 404
-                    return doc_version.to_dict(), 200
+                    return doc_version.to_dict(db.session), 200
                 except sqla_exc.SQLAlchemyError as e:
                     logging.error(f"Database error: {e}")
                     return {"error": "Database error"}, 500
@@ -287,7 +291,7 @@ class DoxyDocHubApiVersionsEndpoint:
                             return error, result
 
                     db.session.commit()
-                    return version.to_dict(), 200
+                    return version.to_dict(db.session), 200
                 except sqla_exc.SQLAlchemyError as e:
                     logging.error(f"Database error: {e}")
                     return {"error": "Database error"}, 500

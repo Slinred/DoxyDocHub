@@ -58,6 +58,25 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
+function createMetadataCard(parent, type, metadata) {
+    if(Object.keys(metadata).length == 0) return;
+
+    const metadataCard = document.createElement("div");
+    metadataCard.className = `${type}-metadata-card`;
+    metadataCard.innerHTML = `<span class="${type}-metadata-title">Metadata</span>`;
+    for (const [key, value] of Object.entries(metadata)) {
+      const keyCard = document.createElement("div");
+      keyCard.className = "card";
+      keyCard.innerHTML = `<span class="${type}-metadata-key">${key}<span>`;
+      const valueSpan = document.createElement("span");
+      valueSpan.className = `${type}-metadata-value`;
+      valueSpan.textContent = value;
+      keyCard.appendChild(valueSpan);
+      metadataCard.appendChild(keyCard);
+    }
+    parent.appendChild(metadataCard);
+}
+
 async function fetchAndRenderProjectDetails(label) {
   const item = label.closest(".tree-item");
   const projectId = item.getAttribute("data-id");
@@ -90,71 +109,58 @@ function renderProjectDetails(project) {
     const genericCard = document.createElement("div");
     genericCard.className = "card";
     genericCard.innerHTML = `
-        <h3>Generic Info</h3>
+        <span class="card-title">Generic Info</span>
         <p><strong>Origin URL:</strong> ${project.origin_url}</p>
         <p><strong>Created At:</strong> ${project.created_at}</p>
     `;
     grid.appendChild(genericCard);
 
     // --- Metadata Card ---
-    const metadataCard = document.createElement("div");
-    metadataCard.className = "card";
-    metadataCard.innerHTML = `<h3>Metadata</h3>`;
-    const metadataList = document.createElement("ul");
-    for (const [key, value] of Object.entries(project.metadata)) {
-        const li = document.createElement("li");
-        li.textContent = `${key}: ${value}`;
-        metadataList.appendChild(li);
-    }
-    metadataCard.appendChild(metadataList);
-    grid.appendChild(metadataCard);
+    createMetadataCard(grid, "project", project.metadata);
 
     // --- Versions Card ---
     const versionsCard = document.createElement("div");
     versionsCard.className = "card";
-    versionsCard.innerHTML = `<h3>Documented Versions</h3>`;
-    const versionList = document.createElement("ul");
+    versionsCard.innerHTML = `<span class="card-title">Documented Versions</span>`;
 
     project.versions.forEach(version => {
-        const li = document.createElement("li");
-        li.className = "version-item";
-        const nameSpan = document.createElement("span");
-        nameSpan.innerHTML = version.version + " <span class='iconify' data-icon='mdi:arrow-right-thin'></span>";
-        nameSpan.classList.add("version-name");
-        // nameSpan.style.cursor = "pointer";
-        li.appendChild(nameSpan);
+        const docVersionCard = document.createElement("div");
+        docVersionCard.className = "version-card card";
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "version-card-title";
+        titleSpan.innerHTML = `${version.version} <a class="doc-version-link> href="/docs/${project.name_slug}/${version.version_slug}/index.html" target="_blank" title="Open documentation in new tab"> <span class="iconify" data-icon="mdi:open-in-new"></span></a>`;
+        docVersionCard.appendChild(titleSpan);
 
-        if (version.has_docs) {
-            const iframeSpan = document.createElement("span");
-            iframeSpan.className ="version-doc-link";
-            iframeSpan.title = "View in embedded frame";
-            iframeSpan.style.cursor = "pointer";
-            iframeSpan.addEventListener("click", () => {
-                showVersionInContent(project, version);
-            });
-            iframeSpan.innerHTML = `<span class="iconify" data-icon="mdi:book-open-page-variant"></span>`;
-            li.appendChild(iframeSpan);
+        // if (version.has_docs) {
+        //     const iframeSpan = document.createElement("span");
+        //     iframeSpan.className ="version-doc-link";
+        //     iframeSpan.title = "View in embedded frame";
+        //     iframeSpan.style.cursor = "pointer";
+        //     iframeSpan.addEventListener("click", () => {
+        //         showVersionInContent(project, version);
+        //     });
+        //     iframeSpan.innerHTML = `<span class="iconify" data-icon="mdi:book-open-page-variant"></span>`;
+        //     docVersionCard.appendChild(iframeSpan);
 
-            const link = document.createElement("a");
-            link.className = "version-doc-link";
-            link.href = `/docs/${project.name_slug}/${version.version_slug}/index.html`;
-            link.target = "_blank";
-            link.innerHTML = ` <span class="iconify" data-icon="mdi:open-in-new"></span>`;
-            li.appendChild(link);
-        }
-        else {
-            const noDocsSpan = document.createElement("span");
-            noDocsSpan.style.color = "#888";
-            noDocsSpan.style.marginLeft = "8px";
-            noDocsSpan.textContent = "(no docs)";
-            li.appendChild(noDocsSpan);
-        }
+        //     const link = document.createElement("a");
+        //     link.className = "version-doc-link";
+        //     link.href = `/docs/${project.name_slug}/${version.version_slug}/index.html`;
+        //     link.target = "_blank";
+        //     link.innerHTML = ` <span class="iconify" data-icon="mdi:open-in-new"></span>`;
+        //     docVersionCard.appendChild(link);
+        // }
+        // else {
+        //     const noDocsSpan = document.createElement("span");
+        //     noDocsSpan.style.color = "#888";
+        //     noDocsSpan.style.marginLeft = "8px";
+        //     noDocsSpan.textContent = "(no docs)";
+        //     docVersionCard.appendChild(noDocsSpan);
+        // }
 
-        versionList.appendChild(li);
+        createMetadataCard(docVersionCard, "version", version.metadata);
+        versionsCard.appendChild(docVersionCard);
     });
 
-
-    versionsCard.appendChild(versionList);
     grid.appendChild(versionsCard);
 
     content.appendChild(grid);

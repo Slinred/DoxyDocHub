@@ -106,6 +106,7 @@ class MetadataAwareBaseDbObject(BaseDbObject):
         actual_metadata_items = self.get_metadata(session)
         existing_keys = {item.key: item for item in actual_metadata_items}
         for key, value in new_metadata.items():
+            value = str(value)
             if key in existing_keys:
                 existing_keys[key].value = value
             else:
